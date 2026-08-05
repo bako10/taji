@@ -301,6 +301,7 @@ const addDays = (iso,n) => { const d=new Date(iso+'T12:00:00'); d.setDate(d.getD
 const esc = s => String(s??'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const PRODUITS = {essence:'Essence', gasoil:'Gasoil', petrole:'Pétrole lampant', melange:'Mélange'};
 const METHODES = {especes:'💵 Espèces', orange_money:'🟠 Orange Money', moov_money:'🔵 Moov Money', credit:'📒 Crédit client'};
+const EXP_CATS = {salaire:'Salaire', maintenance:'Maintenance', electricite:'Électricité', transport:'Transport', taxe:'Taxe', carburant:'Carburant', autre:'Autre'};
 const CHIP = {
   ok:'<span class="chip ok">✔ Conforme</span>',
   warn:'<span class="chip warn">⚠ À surveiller</span>',
@@ -323,6 +324,12 @@ function latestPrice(orgId, product, day){
   const rows = S.prices.filter(p=>p.org_id===orgId && p.product===product && p.effective_date<= (day||todayISO()));
   rows.sort((a,b)=> a.effective_date<b.effective_date?1:-1);
   return rows[0]?.price_fcfa ?? null;
+}
+/* Dernier prix d'achat connu (ignore les lignes sans prix d'achat) — pour la marge */
+function latestBuyPrice(orgId, product, day){
+  const rows = S.prices.filter(p=>p.org_id===orgId && p.product===product && p.effective_date<=(day||todayISO()) && p.buy_price_fcfa!=null);
+  rows.sort((a,b)=> a.effective_date<b.effective_date?1:-1);
+  return rows[0]?.buy_price_fcfa ?? null;
 }
 function orgOf(station){ return S.orgs.find(o=>o.id===station.org_id); }
 function myStations(){
@@ -539,14 +546,15 @@ async function loadInfra(stId){
   return infra;
 }
 async function loadDay(stId, day){
-  const [readings, dips, deliveries, cash, closure] = await Promise.all([
+  const [readings, dips, deliveries, cash, expenses, closure] = await Promise.all([
     safe(sb.from('nozzle_readings').select('*').eq('station_id',stId).eq('day',day)),
     safe(sb.from('tank_dips').select('*').eq('station_id',stId).eq('day',day)),
     safe(sb.from('deliveries').select('*').eq('station_id',stId).eq('day',day).order('created_at')),
     safe(sb.from('cash_entries').select('*').eq('station_id',stId).eq('day',day).order('created_at')),
+    safe(sb.from('expenses').select('*').eq('station_id',stId).eq('day',day).order('created_at')),
     safe(sb.from('day_closures').select('*').eq('station_id',stId).eq('day',day).maybeSingle())
   ]);
-  return {readings, dips, deliveries, cash, closure};
+  return {readings, dips, deliveries, cash, expenses, closure};
 }
 async function lastClosingIndexes(stId, day, nozzles){
   const since = addDays(day,-60);
@@ -594,12 +602,13 @@ async function computeDay(st, day, dayData, infra){
     if(r.staff_id){ parPompiste[r.staff_id] = (parPompiste[r.staff_id]||0) + v; }
   });
   // besoin des ventes intermédiaires entre le dernier jaugeage et ce jour (si trou de plusieurs jours)
-  let ventesL=0, caTheo=0, ecartCuve=0;
+  let ventesL=0, caTheo=0, ecartCuve=0, margeBrute=0, margeDispo=false;
   const lignes = [];
   const org = orgOf(st);
   for(const t of tanks){
     const ventes = parCuve[t.id].ventes;
     const prix = latestPrice(org.id, t.product, day) || 0;
+    const prixAchat = latestBuyPrice(org.id, t.product, day);
     const livraisons = deliveries.filter(d=>d.tank_id===t.id)
       .reduce((s,d)=> s + (+d.volume_received_l ?? +d.volume_invoiced_l), 0);
     // ventes + livraisons entre baseline et hier (jours intermédiaires non jaugés)
@@ -620,15 +629,20 @@ async function computeDay(st, day, dayData, infra){
     const dipRow = dips.find(d=>d.tank_id===t.id);
     const jauge = dipRow ? +dipRow.dip_l : null;
     const ec = (jauge!==null) ? (jauge - stockAttendu) : 0;
+    const margeLigne = (prixAchat!=null) ? ventes*(prix - prixAchat) : null;
+    if(margeLigne!=null){ margeBrute += margeLigne; margeDispo = true; }
     ventesL += ventes; caTheo += ventes*prix; ecartCuve += ec;
-    lignes.push({tank:t, produit:PRODUITS[t.product], ventes, prix, ca:ventes*prix,
+    lignes.push({tank:t, produit:PRODUITS[t.product], ventes, prix, prixAchat, marge:margeLigne, ca:ventes*prix,
                  stockAttendu, jauge, ecart:ec, livraisons});
   }
   const enc = cash.reduce((s,c)=> s + (+c.amount_fcfa||0), 0);
   const encParMode = {};
   cash.forEach(c=>{ encParMode[c.method]=(encParMode[c.method]||0)+(+c.amount_fcfa||0); });
   const ecartCaisse = enc - caTheo;
+  const depenses = (dayData.expenses||[]).reduce((s,e)=> s + (+e.amount_fcfa||0), 0);
+  const margeNette = margeDispo ? (margeBrute - depenses) : null;
   return {ventesL, caTheo, enc, encParMode, ecartCaisse, ecartCuve, lignes, parPompiste,
+          margeBrute: margeDispo?margeBrute:null, depenses, margeNette, margeDispo,
           readingsOk, dipsOk, cashOk, complet: readingsOk && dipsOk};
 }
 function statutOf(c){
@@ -667,17 +681,18 @@ async function renderAccueil(){
   try{
     const closures = await safe(sb.from('day_closures').select('*')
       .in('station_id', sts.map(s=>s.id)).gte('day', addDays(day,-13)).lte('day', day).eq('status','closed'));
-    let vt=0,ecu=0,eca=0,n=0;
+    let vt=0,ecu=0,eca=0,mg=0,mgAny=false,n=0;
     const todayRows = sts.map(st=>{
       const c = closures.find(x=>x.station_id===st.id && x.day===day);
-      if(c){ const s=c.summary; vt+=s.ventesL||0; ecu+=s.ecartCuve||0; eca+=s.ecartCaisse||0; n++; }
+      if(c){ const s=c.summary; vt+=s.ventesL||0; ecu+=s.ecartCuve||0; eca+=s.ecartCaisse||0; if(s.margeNette!=null){mg+=s.margeNette; mgAny=true;} n++; }
       return {st, c};
     });
     $('#ov_tiles').innerHTML = n===0
       ? `<div class="tile" style="grid-column:1/-1"><div class="lbl">EN ATTENTE</div><div style="font-size:12.5px;color:var(--ink2)">Aucune journée clôturée pour cette date. Les chiffres apparaissent dès la clôture par le gérant.</div></div>`
       : `<div class="tile"><div class="lbl">LITRES VENDUS</div><div class="val">${fmt(vt)}</div><div class="unit">litres · ${n}/${sts.length} clôturées</div></div>
          <div class="tile"><div class="lbl">ÉCART CUVES</div><div class="val ${ecu<0?'neg':''}">${fmtS(ecu)}</div><div class="unit">litres</div></div>
-         <div class="tile"><div class="lbl">ÉCART CAISSE</div><div class="val ${eca<0?'neg':''}">${fmtS(eca)}</div><div class="unit">FCFA</div></div>`;
+         <div class="tile"><div class="lbl">ÉCART CAISSE</div><div class="val ${eca<0?'neg':''}">${fmtS(eca)}</div><div class="unit">FCFA</div></div>
+         ${mgAny?`<div class="tile" style="grid-column:1/-1;background:var(--brand-soft);border-color:var(--brand)"><div class="lbl" style="color:var(--brand)">MARGE NETTE</div><div class="val ${mg<0?'neg':'pos'}">${fmt(mg)}</div><div class="unit">FCFA · CA − achats − dépenses</div></div>`:''}`;
     $('#ov_list').innerHTML = todayRows.map(({st,c})=>{
       const s = c?.summary;
       return `<div class="card" style="cursor:pointer" onclick="renderStationDetail('${st.id}')">
@@ -767,12 +782,20 @@ function reportCard(st, day, sum, withActions){
       <div class="tile"><div class="lbl">ÉCART CUVES</div><div class="val ${sum.ecartCuve<0?'neg':''}">${fmtS(sum.ecartCuve)}</div><div class="unit">litres</div></div>
       <div class="tile"><div class="lbl">ÉCART CAISSE</div><div class="val ${sum.ecartCaisse<0?'neg':''}">${fmtS(sum.ecartCaisse)}</div><div class="unit">FCFA</div></div>
     </div>
+    ${sum.margeNette!=null?`<div class="tile" style="margin:2px 0 8px;background:var(--brand-soft);border-color:var(--brand)">
+      <div class="lbl" style="color:var(--brand)">MARGE NETTE DU JOUR</div>
+      <div class="val ${sum.margeNette<0?'neg':'pos'}" style="font-size:22px">${fmt(sum.margeNette)} F</div>
+      <div class="unit">CA réel − achats − dépenses</div></div>`:''}
     <table class="rec" style="margin-top:10px">
       ${(sum.lignes||[]).map(l=>`<tr><td>${esc(l.produit)} — ${fmt(l.ventes)} L × ${fmt(l.prix)} F</td><td class="${l.ecart<0?'neg':''}">écart cuve ${fmtS(l.ecart)} L</td></tr>`).join('')}
       <tr><td>CA théorique</td><td><b>${fmt(sum.caTheo)} F</b></td></tr>
       ${modes}
       <tr><td><b>Total encaissé</b></td><td><b>${fmt(sum.enc)} F</b></td></tr>
       <tr><td><b>Écart de caisse</b></td><td class="${sum.ecartCaisse<0?'neg':'pos'}"><b>${fmtS(sum.ecartCaisse)} F</b></td></tr>
+      ${sum.margeNette!=null?`
+      <tr><td>Marge brute carburant</td><td>${fmt(sum.margeBrute)} F</td></tr>
+      <tr><td>Dépenses du jour</td><td>${sum.depenses?('−'+fmt(sum.depenses)):'0'} F</td></tr>
+      <tr><td><b>Marge nette</b></td><td class="${sum.margeNette<0?'neg':'pos'}"><b>${fmt(sum.margeNette)} F</b></td></tr>`:''}
     </table>
     ${withActions?`
     <div class="grid2" style="margin-top:4px">
@@ -883,6 +906,21 @@ async function renderSaisie(){
         <button class="link" style="color:var(--crit)" onclick="delCash('${c.id}')">retirer</button></div>`; }).join('')}
       <button class="btn" onclick="saveCaisse('${st.id}')">Enregistrer la caisse</button></div></div>
 
+    <div class="stepcard"><div class="step-h" onclick="this.parentElement.classList.toggle('open')">
+      <div class="num ${dayData.expenses.length?'done':''}">${dayData.expenses.length?'✓':'4'}</div><div class="t">Dépenses du jour</div><div class="st">FCFA · optionnel</div></div>
+      <div class="step-b">
+      <div class="grid2">
+        <div class="fld"><label>Catégorie</label><select id="ex_cat">${Object.entries(EXP_CATS).map(([k,v])=>`<option value="${k}" ${k==='autre'?'selected':''}>${v}</option>`).join('')}</select></div>
+        <div class="fld"><label>Montant (FCFA)</label><input type="number" inputmode="numeric" id="ex_amt" placeholder="0"></div>
+      </div>
+      <div class="fld"><label>Libellé (optionnel)</label><input id="ex_lbl" placeholder="ex : salaire pompiste, facture EDM…"></div>
+      <button class="btn ghost small" onclick="addExpense('${st.id}')">+ Ajouter la dépense</button>
+      ${dayData.expenses.map(e=>`<div style="font-size:12.5px;color:var(--ink2);padding:4px 0">💸 ${esc(EXP_CATS[e.category]||e.category)}${e.label?(' · '+esc(e.label)):''} : ${fmt(e.amount_fcfa)} F
+        <button class="link" style="color:var(--crit)" onclick="delExpense('${e.id}')">retirer</button></div>`).join('')}
+      ${dayData.expenses.length?`<div style="font-size:12.5px;color:var(--ink1);font-weight:700;padding-top:6px">Total dépenses : ${fmt(dayData.expenses.reduce((s,e)=>s+ +e.amount_fcfa,0))} F</div>`:''}
+      <div class="hint" style="margin-top:6px;color:var(--ink3);font-size:11px">La marge nette (CA − achats − dépenses) apparaît au rapport si le prix d'achat est renseigné dans Réglages.</div>
+      </div></div>
+
     <button class="btn" id="btn_close" ${done1&&done2?'':'disabled'} onclick="doCloture('${st.id}')">✅ Clôturer la journée</button>
     <div id="preview"></div>
     <div class="note">Les relevés restent modifiables jusqu'à la clôture. Après clôture, seul le propriétaire peut rouvrir la journée.</div>`;
@@ -952,6 +990,16 @@ async function addCreditSale(stId){
     toast('✔ Vente à crédit ajoutée'); renderSaisie();
   }catch(e){ err(e); }
 }
+async function addExpense(stId){
+  try{
+    const amt = parseFloat($('#ex_amt').value);
+    if(!(amt>0)) return toast('Montant requis');
+    await safe(sb.from('expenses').insert({station_id:stId, day:S.day, category:$('#ex_cat').value,
+      label:$('#ex_lbl').value.trim(), amount_fcfa:amt, entered_by:S.user.id}));
+    toast('✔ Dépense ajoutée'); renderSaisie();
+  }catch(e){ err(e); }
+}
+async function delExpense(id){ try{ await safe(sb.from('expenses').delete().eq('id',id)); renderSaisie(); }catch(e){ err(e);} }
 async function doCloture(stId){
   try{
     $('#btn_close').disabled = true;
@@ -963,7 +1011,8 @@ async function doCloture(stId){
     if(!c.cashOk && !confirm('Aucun encaissement saisi. Clôturer quand même ?')){ $('#btn_close').disabled=false; return; }
     const summary = {ventesL:c.ventesL, caTheo:c.caTheo, enc:c.enc, encParMode:c.encParMode,
       ecartCaisse:c.ecartCaisse, ecartCuve:c.ecartCuve, statut:statutOf(c),
-      lignes:c.lignes.map(l=>({produit:l.produit, ventes:l.ventes, prix:l.prix, ca:l.ca, ecart:l.ecart, jauge:l.jauge, stockAttendu:l.stockAttendu})),
+      margeBrute:c.margeBrute, depenses:c.depenses, margeNette:c.margeNette, margeDispo:c.margeDispo,
+      lignes:c.lignes.map(l=>({produit:l.produit, ventes:l.ventes, prix:l.prix, prixAchat:l.prixAchat, marge:l.marge, ca:l.ca, ecart:l.ecart, jauge:l.jauge, stockAttendu:l.stockAttendu})),
       parPompiste:c.parPompiste};
     if(dayData.closure && dayData.closure.status==='reopened'){
       await safe(sb.from('day_closures').update({status:'closed', summary, closed_by:S.user.id, closed_at:new Date().toISOString()}).eq('id',dayData.closure.id));
@@ -1161,7 +1210,7 @@ async function renderRapports(){
     const closures = await safe(sb.from('day_closures').select('*').in('station_id',sts.map(s=>s.id))
       .gte('day',d1).lte('day',d2).eq('status','closed').order('day'));
     let h='';
-    let T={v:0,ca:0,enc:0,ec:0,cu:0};
+    let T={v:0,ca:0,enc:0,ec:0,cu:0,mg:0}; let mgAny=false;
     h += `<div class="card"><table class="rec"><tr><th>Station</th><th>Jours</th><th>Litres</th><th>Écart caisse</th></tr>`;
     sts.forEach(st=>{
       const cs = closures.filter(c=>c.station_id===st.id);
@@ -1170,7 +1219,9 @@ async function renderRapports(){
       const enc = cs.reduce((a,c)=>a+(c.summary.enc||0),0);
       const ec = cs.reduce((a,c)=>a+(c.summary.ecartCaisse||0),0);
       const cu = cs.reduce((a,c)=>a+(c.summary.ecartCuve||0),0);
-      T.v+=v;T.ca+=ca;T.enc+=enc;T.ec+=ec;T.cu+=cu;
+      const mg = cs.reduce((a,c)=>a+(c.summary.margeNette||0),0);
+      if(cs.some(c=>c.summary.margeNette!=null)) mgAny=true;
+      T.v+=v;T.ca+=ca;T.enc+=enc;T.ec+=ec;T.cu+=cu;T.mg+=mg;
       h += `<tr><td>${esc(st.name)}</td><td>${cs.length}</td><td>${fmt(v)} L</td><td class="${ec<0?'neg':''}">${fmtS(ec)} F</td></tr>`;
     });
     h += `<tr><td><b>Total</b></td><td></td><td><b>${fmt(T.v)} L</b></td><td class="${T.ec<0?'neg':''}"><b>${fmtS(T.ec)} F</b></td></tr></table></div>`;
@@ -1178,6 +1229,7 @@ async function renderRapports(){
       <div class="tile"><div class="lbl">CA THÉORIQUE</div><div class="val">${fmt(T.ca/1000000)}</div><div class="unit">millions F</div></div>
       <div class="tile"><div class="lbl">ENCAISSÉ</div><div class="val">${fmt(T.enc/1000000)}</div><div class="unit">millions F</div></div>
       <div class="tile"><div class="lbl">ÉCART CUVES</div><div class="val ${T.cu<0?'neg':''}">${fmtS(T.cu)}</div><div class="unit">litres</div></div>
+      ${mgAny?`<div class="tile" style="grid-column:1/-1;background:var(--brand-soft);border-color:var(--brand)"><div class="lbl" style="color:var(--brand)">MARGE NETTE DU MOIS</div><div class="val ${T.mg<0?'neg':'pos'}">${fmt(T.mg)}</div><div class="unit">FCFA</div></div>`:''}
     </div>
     <h2 class="sec">Exports (pour le comptable)</h2>
     <div class="card">
@@ -1196,11 +1248,12 @@ function dlCSV(name, rows){
 }
 function exportClosuresCSV(mois){
   const {closures} = S.cache.rapport;
-  const rows = [['Date','Station','Litres vendus','CA théorique (F)','Encaissé (F)','Écart caisse (F)','Écart cuves (L)','Statut']];
+  const rows = [['Date','Station','Litres vendus','CA théorique (F)','Encaissé (F)','Écart caisse (F)','Écart cuves (L)','Marge brute (F)','Dépenses (F)','Marge nette (F)','Statut']];
   closures.forEach(c=>{
-    const st = S.stations.find(s=>s.id===c.station_id);
-    rows.push([c.day, st?.name, Math.round(c.summary.ventesL||0), Math.round(c.summary.caTheo||0),
-      Math.round(c.summary.enc||0), Math.round(c.summary.ecartCaisse||0), Math.round(c.summary.ecartCuve||0), c.summary.statut]);
+    const st = S.stations.find(s=>s.id===c.station_id); const s=c.summary;
+    rows.push([c.day, st?.name, Math.round(s.ventesL||0), Math.round(s.caTheo||0),
+      Math.round(s.enc||0), Math.round(s.ecartCaisse||0), Math.round(s.ecartCuve||0),
+      s.margeBrute!=null?Math.round(s.margeBrute):'', s.depenses!=null?Math.round(s.depenses):'', s.margeNette!=null?Math.round(s.margeNette):'', s.statut]);
   });
   dlCSV(`taji_syntheses_${mois}.csv`, rows);
 }
@@ -1239,17 +1292,22 @@ async function renderReglages(){
     <button class="btn ghost small" onclick="saveProfile()">Enregistrer</button></div>`;
   if(S.isOwner){
     const org = S.orgs.find(o=>o.owner_id===S.user.id);
-    h += `<h2 class="sec">Prix à la pompe (FCFA / L)</h2><div class="card" id="rg_prices">`;
+    h += `<h2 class="sec">Prix vente / achat (FCFA / L)</h2><div class="card" id="rg_prices">`;
+    const inpStyle = 'width:78px;padding:8px;border:1.5px solid var(--grid);border-radius:8px;background:var(--page);color:var(--ink1);font-size:15px';
     for(const p of Object.keys(PRODUITS)){
       const cur = latestPrice(org.id, p);
+      const curBuy = latestBuyPrice(org.id, p);
       if(cur===null && !['essence','gasoil'].includes(p)) continue;
       h += `<div class="listrow"><div class="t">${PRODUITS[p]}</div>
-        <div style="display:flex;gap:8px;align-items:center">
-          <input type="number" inputmode="numeric" id="px_${p}" value="${cur??''}" placeholder="—" style="width:100px;padding:8px;border:1.5px solid var(--grid);border-radius:8px;background:var(--page);color:var(--ink1);font-size:15px">
+        <div style="display:flex;gap:8px;align-items:flex-end">
+          <div style="text-align:center"><div style="font-size:9.5px;color:var(--ink3);font-weight:700;margin-bottom:2px">VENTE</div>
+            <input type="number" inputmode="numeric" id="px_${p}" value="${cur??''}" placeholder="—" style="${inpStyle}"></div>
+          <div style="text-align:center"><div style="font-size:9.5px;color:var(--ink3);font-weight:700;margin-bottom:2px">ACHAT</div>
+            <input type="number" inputmode="numeric" id="buy_${p}" value="${curBuy??''}" placeholder="—" style="${inpStyle}"></div>
         </div></div>`;
     }
     h += `<button class="btn ghost small" onclick="savePrices('${org.id}')">Mettre à jour les prix</button>
-      <div class="hint" style="margin-top:6px;color:var(--ink3);font-size:11px">Chaque changement est historisé : les rapports passés gardent l'ancien prix.</div></div>`;
+      <div class="hint" style="margin-top:6px;color:var(--ink3);font-size:11px">Le prix d'achat sert au calcul de la marge nette. Chaque changement est historisé : les rapports passés gardent l'ancien prix.</div></div>`;
     h += `<h2 class="sec">Mes stations</h2>`;
     sts.forEach(st=>{ h += `<div class="card"><div class="rowline" style="cursor:pointer" onclick="renderStationConfig('${st.id}')">
       <div><div style="font-weight:700">${esc(st.name)}</div><div style="font-size:12px;color:var(--ink3)">${esc(st.city)} — cuves, pistolets, invitations</div></div>
@@ -1276,8 +1334,15 @@ async function savePrices(orgId){
     const rows=[];
     for(const p of Object.keys(PRODUITS)){
       const el = document.getElementById('px_'+p); if(!el) continue;
-      const v = parseFloat(el.value);
-      if(v>0 && v!==latestPrice(orgId,p)) rows.push({org_id:orgId, product:p, price_fcfa:v, created_by:S.user.id});
+      const elBuy = document.getElementById('buy_'+p);
+      const curSale = latestPrice(orgId,p), curBuy = latestBuyPrice(orgId,p);
+      const saleChanged = el.value!=='' && parseFloat(el.value)!==curSale;
+      const buyChanged  = elBuy && elBuy.value!=='' && parseFloat(elBuy.value)!==curBuy;
+      if(!(saleChanged || buyChanged)) continue;
+      const vSale = el.value===''? curSale : parseFloat(el.value);
+      const vBuy  = (!elBuy || elBuy.value==='')? curBuy : parseFloat(elBuy.value);
+      if(!(vSale>0)){ toast('Prix de vente requis — '+PRODUITS[p]); continue; }
+      rows.push({org_id:orgId, product:p, price_fcfa:vSale, buy_price_fcfa:(vBuy!=null && vBuy>=0)? vBuy : null, created_by:S.user.id});
     }
     if(!rows.length) return toast('Aucun changement');
     await safe(sb.from('prices').insert(rows));
