@@ -1,0 +1,16 @@
+# Documents business — ne JAMAIS committer (dépôt public)
+docs/
+
+# Secrets / environnement
+.env
+.env.*
+!.env.example
+
+# Node / build (v2 React à venir)
+node_modules/
+dist/
+.vite/
+*.local
+
+# OS
+.DS_Store
