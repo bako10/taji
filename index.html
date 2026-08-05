@@ -1,0 +1,1208 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#1b5e20">
+<title>Taji — Gestion de stations-service</title>
+<style>
+  :root{
+    color-scheme: light;
+    --surface:#fcfcfb; --page:#f9f9f7;
+    --ink1:#0b0b0b; --ink2:#52514e; --ink3:#898781;
+    --grid:#e1e0d9; --baseline:#c3c2b7; --ring:rgba(11,11,11,.10);
+    --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a;
+    --good:#0ca30c; --warn:#fab219; --crit:#d03b3b; --good-text:#006300;
+    --brand:#1b5e20; --brand2:#2e7d32; --brand-soft:#e8f5e9;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      color-scheme: dark;
+      --surface:#1a1a19; --page:#0d0d0d;
+      --ink1:#ffffff; --ink2:#c3c2b7; --ink3:#898781;
+      --grid:#2c2c2a; --baseline:#383835; --ring:rgba(255,255,255,.10);
+      --s1:#3987e5; --s2:#d95926; --s3:#199e70;
+      --good-text:#0ca30c;
+      --brand:#66bb6a; --brand2:#81c784; --brand-soft:#12351a;
+    }
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{-webkit-text-size-adjust:100%}
+  body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--page);color:var(--ink1);font-size:15px;line-height:1.45}
+  .app{max-width:520px;margin:0 auto;min-height:100vh;padding-bottom:84px}
+  .hidden{display:none!important}
+
+  .topbar{position:sticky;top:0;z-index:30;background:var(--page);padding:13px 16px 10px;border-bottom:1px solid var(--grid);display:flex;align-items:center;justify-content:space-between}
+  .brand{font-weight:800;font-size:20px;letter-spacing:-.3px}
+  .brand .p{color:var(--brand)}
+  .topmeta{font-size:11.5px;color:var(--ink3);text-align:right;line-height:1.3}
+
+  main{padding:16px}
+  h1.pg{font-size:20px;font-weight:800;margin-bottom:2px;letter-spacing:-.3px}
+  .sub{font-size:12.5px;color:var(--ink3);margin-bottom:14px}
+  h2.sec{font-size:12.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--ink3);margin:20px 0 10px;font-weight:700}
+  .card{background:var(--surface);border:1px solid var(--ring);border-radius:14px;padding:14px;margin-bottom:12px}
+  .rowline{display:flex;align-items:center;justify-content:space-between;gap:10px}
+
+  .tiles{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:4px}
+  .tile{background:var(--surface);border:1px solid var(--ring);border-radius:14px;padding:12px 10px}
+  .tile .lbl{font-size:10.5px;color:var(--ink3);font-weight:700;margin-bottom:4px;letter-spacing:.3px}
+  .tile .val{font-size:19px;font-weight:800;letter-spacing:-.3px;line-height:1.1}
+  .tile .unit{font-size:11px;color:var(--ink2);font-weight:600}
+  .neg{color:var(--crit)} .pos{color:var(--good-text)}
+
+  .chip{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;border-radius:99px;padding:3px 10px;color:#fff}
+  .chip.ok{background:var(--good)} .chip.warn{background:var(--warn);color:#3a2a00}
+  .chip.crit{background:var(--crit)} .chip.wait{background:var(--ink3)}
+
+  .btn{display:block;width:100%;border:0;background:var(--brand);color:#fff;font-weight:700;font-size:15px;padding:13px;border-radius:12px;cursor:pointer;font-family:inherit;margin-top:10px}
+  .btn.ghost{background:transparent;color:var(--brand);border:1.5px solid var(--brand)}
+  .btn.small{width:auto;display:inline-block;padding:8px 14px;font-size:13px;margin-top:0}
+  .btn.danger{background:var(--crit)}
+  .btn:disabled{opacity:.45;cursor:default}
+  .link{background:none;border:0;color:var(--brand);font-weight:700;cursor:pointer;font-size:13.5px;font-family:inherit;padding:0}
+  .back{background:none;border:0;color:var(--brand);font-weight:700;font-size:14px;cursor:pointer;padding:0;margin-bottom:12px;font-family:inherit}
+
+  .fld{margin-bottom:11px}
+  .fld label{display:block;font-size:12px;color:var(--ink2);font-weight:600;margin-bottom:4px}
+  .fld input,.fld select{width:100%;padding:11px 12px;font-size:16px;border:1.5px solid var(--grid);border-radius:10px;background:var(--page);color:var(--ink1);font-family:inherit;font-variant-numeric:tabular-nums}
+  .fld input:focus,.fld select:focus{outline:2px solid var(--brand);border-color:transparent}
+  .fld .hint{font-size:11px;color:var(--ink3);margin-top:3px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+
+  table.rec{width:100%;border-collapse:collapse;font-size:13px}
+  table.rec th{text-align:left;color:var(--ink3);font-weight:700;font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;padding:6px 4px;border-bottom:1px solid var(--grid)}
+  table.rec td{padding:8px 4px;border-bottom:1px solid var(--grid);font-variant-numeric:tabular-nums}
+  table.rec td:last-child,table.rec th:last-child{text-align:right}
+  table.rec tr:last-child td{border-bottom:0}
+
+  .tabbar{position:fixed;bottom:0;left:0;right:0;z-index:30;background:var(--surface);border-top:1px solid var(--grid)}
+  .tabbar .in{max-width:520px;margin:0 auto;display:flex}
+  .tabbar button{flex:1;border:0;background:none;color:var(--ink3);font-size:10.5px;font-weight:700;padding:9px 2px 10px;cursor:pointer;font-family:inherit;display:flex;flex-direction:column;align-items:center;gap:3px}
+  .tabbar button .ic{font-size:20px;line-height:1}
+  .tabbar button.active{color:var(--brand)}
+
+  .stepcard{background:var(--surface);border:1px solid var(--ring);border-radius:14px;overflow:hidden;margin-bottom:10px}
+  .step-h{display:flex;align-items:center;gap:10px;padding:13px 14px;cursor:pointer}
+  .step-h .num{width:26px;height:26px;border-radius:99px;background:var(--brand-soft);color:var(--brand);font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .step-h .num.done{background:var(--good);color:#fff}
+  .step-h .t{font-weight:700;font-size:14.5px;flex:1}
+  .step-h .st{font-size:11px;color:var(--ink3)}
+  .step-b{padding:0 14px 14px;display:none}
+  .stepcard.open .step-b{display:block}
+  .pumphead{font-size:12.5px;font-weight:700;color:var(--ink2);margin:12px 0 6px;padding-top:10px;border-top:1px dashed var(--grid)}
+  .pumphead:first-child{border-top:0;padding-top:0;margin-top:0}
+
+  .wa{background:var(--brand-soft);border-radius:12px;padding:12px;font-size:13px;white-space:pre-wrap;line-height:1.5;margin-top:10px}
+  .legend{display:flex;gap:14px;margin-bottom:6px;flex-wrap:wrap}
+  .legend .it{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink2)}
+  .legend .sw{width:14px;height:3px;border-radius:2px}
+  .chartwrap{position:relative}
+  #tip{position:absolute;pointer-events:none;background:var(--ink1);color:var(--page);font-size:11.5px;padding:5px 8px;border-radius:7px;white-space:nowrap;transform:translate(-50%,-130%);display:none;font-weight:600;z-index:5}
+
+  #toast{position:fixed;bottom:74px;left:50%;transform:translateX(-50%);background:var(--ink1);color:var(--page);padding:10px 18px;border-radius:99px;font-size:13.5px;font-weight:600;z-index:99;display:none;max-width:90%;text-align:center}
+  #loader{position:fixed;inset:0;background:var(--page);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;z-index:100}
+  .spin{width:34px;height:34px;border:4px solid var(--grid);border-top-color:var(--brand);border-radius:99px;animation:sp 1s linear infinite}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .auth-hero{text-align:center;padding:38px 16px 8px}
+  .auth-hero .logo{font-size:44px}
+  .auth-hero h1{font-size:28px;font-weight:800;letter-spacing:-.5px}
+  .auth-hero p{color:var(--ink2);font-size:13.5px;margin-top:4px}
+  .switch-auth{text-align:center;margin-top:14px;font-size:13.5px;color:var(--ink2)}
+  .listrow{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--grid);gap:10px}
+  .listrow:last-child{border-bottom:0}
+  .listrow .t{font-weight:700;font-size:14px}
+  .listrow .m{font-size:12px;color:var(--ink3)}
+  .bignum{font-size:26px;font-weight:800;letter-spacing:-.5px}
+  .datepick{display:flex;gap:8px;align-items:center;margin-bottom:12px}
+  .datepick input{padding:9px 10px;font-size:14px;border:1.5px solid var(--grid);border-radius:10px;background:var(--surface);color:var(--ink1);font-family:inherit}
+  .codebox{font-size:26px;font-weight:800;letter-spacing:4px;text-align:center;background:var(--brand-soft);border-radius:12px;padding:14px;margin:10px 0;color:var(--brand)}
+  .note{font-size:11.5px;color:var(--ink3);text-align:center;padding:14px 24px 4px;line-height:1.5}
+</style>
+</head>
+<body>
+<div id="loader"><div class="spin"></div><div style="color:var(--ink3);font-size:13px">Taji démarre…</div></div>
+<div class="app">
+  <div class="topbar hidden" id="topbar">
+    <div class="brand"><span class="p">⛽</span> Taji</div>
+    <div class="topmeta" id="topmeta"></div>
+  </div>
+  <main id="main"></main>
+</div>
+<div class="tabbar hidden" id="tabbar"><div class="in" id="tabs"></div></div>
+<div id="toast"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
+/* =====================================================================
+   TAJI — application de gestion de stations-service (Mali)
+   Front-end vanilla JS + Supabase
+===================================================================== */
+const SUPABASE_URL = 'https://ayvmfcttcondxvfpdiok.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_WEoGK95LS8IXeNoZyV9Sng_Vnjukyd-';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+/* ---------- helpers ---------- */
+const $ = s => document.querySelector(s);
+const fmt  = n => Math.round(+n||0).toLocaleString('fr-FR');
+const fmtS = n => ((+n)>0?'+':(+n)<0?'−':'') + fmt(Math.abs(+n||0));
+const todayISO = () => new Date().toISOString().slice(0,10);
+const frDate = iso => new Date(iso+'T12:00:00').toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'});
+const frDateShort = iso => new Date(iso+'T12:00:00').toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'});
+const addDays = (iso,n) => { const d=new Date(iso+'T12:00:00'); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); };
+const esc = s => String(s??'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const PRODUITS = {essence:'Essence', gasoil:'Gasoil', petrole:'Pétrole lampant', melange:'Mélange'};
+const METHODES = {especes:'💵 Espèces', orange_money:'🟠 Orange Money', moov_money:'🔵 Moov Money', credit:'📒 Crédit client'};
+const CHIP = {
+  ok:'<span class="chip ok">✔ Conforme</span>',
+  warn:'<span class="chip warn">⚠ À surveiller</span>',
+  crit:'<span class="chip crit">✖ Écart important</span>',
+  wait:'<span class="chip wait">⏳ En attente</span>'
+};
+function toast(msg, ms=2600){ const t=$('#toast'); t.textContent=msg; t.style.display='block'; clearTimeout(t._h); t._h=setTimeout(()=>t.style.display='none',ms); }
+function err(e){ console.error(e); toast('⚠ ' + (e?.message || e || 'Erreur inattendue'), 4000); }
+async function safe(promise){ const {data,error} = await promise; if(error) throw error; return data; }
+
+/* ---------- état global ---------- */
+const S = {
+  session:null, user:null, profile:null,
+  orgs:[], stations:[], memberships:[], prices:[],
+  isOwner:false, isGerant:false,
+  tab:'accueil', day: todayISO(), gerStation:null,
+  cache:{}
+};
+function latestPrice(orgId, product, day){
+  const rows = S.prices.filter(p=>p.org_id===orgId && p.product===product && p.effective_date<= (day||todayISO()));
+  rows.sort((a,b)=> a.effective_date<b.effective_date?1:-1);
+  return rows[0]?.price_fcfa ?? null;
+}
+function orgOf(station){ return S.orgs.find(o=>o.id===station.org_id); }
+function myStations(){
+  if(S.isOwner) return S.stations.filter(st=> S.orgs.some(o=>o.id===st.org_id && o.owner_id===S.user.id) && st.active);
+  return S.stations.filter(st=> S.memberships.some(m=>m.station_id===st.id) && st.active);
+}
+
+/* ---------- chargement du contexte ---------- */
+async function loadContext(){
+  const uid = S.user.id;
+  const [profile, orgs, stations, memberships, prices] = await Promise.all([
+    safe(sb.from('profiles').select('*').eq('id', uid).maybeSingle()),
+    safe(sb.from('organizations').select('*')),
+    safe(sb.from('stations').select('*').order('created_at')),
+    safe(sb.from('station_members').select('*').eq('user_id', uid).eq('active', true)),
+    safe(sb.from('prices').select('*'))
+  ]);
+  S.profile = profile; S.orgs = orgs; S.stations = stations;
+  S.memberships = memberships; S.prices = prices;
+  S.isOwner = orgs.some(o=>o.owner_id===uid);
+  S.isGerant = memberships.length>0;
+}
+
+/* ---------- démarrage ---------- */
+async function boot(){
+  try{
+    const { data:{session} } = await sb.auth.getSession();
+    S.session = session; S.user = session?.user || null;
+    if(!S.user){ renderAuth(); }
+    else{
+      await loadContext();
+      if(!S.isOwner && !S.isGerant) renderChooseRole();
+      else renderApp();
+    }
+  }catch(e){ err(e); renderAuth(); }
+  $('#loader').style.display='none';
+}
+sb.auth.onAuthStateChange((_e, session)=>{ S.session=session; S.user=session?.user||null; });
+
+/* =====================================================================
+   AUTHENTIFICATION
+===================================================================== */
+function authShell(inner){
+  $('#topbar').classList.add('hidden'); $('#tabbar').classList.add('hidden');
+  $('#main').innerHTML = `
+    <div class="auth-hero"><div class="logo">⛽</div><h1>Taji</h1>
+      <p>La gestion claire de vos stations-service.<br>Pompes · Cuves · Caisse · Écarts</p></div>
+    <div class="card" style="margin-top:14px">${inner}</div>`;
+}
+function renderAuth(mode='login'){
+  if(mode==='login'){
+    authShell(`
+      <div class="fld"><label>Adresse email</label><input id="a_email" type="email" autocomplete="email" placeholder="vous@exemple.com"></div>
+      <div class="fld"><label>Mot de passe</label><input id="a_pass" type="password" autocomplete="current-password"></div>
+      <button class="btn" onclick="doLogin()">Se connecter</button>
+      <div class="switch-auth">Pas encore de compte ? <button class="link" onclick="renderAuth('signup')">Créer un compte</button></div>`);
+  } else {
+    authShell(`
+      <div class="fld"><label>Nom complet</label><input id="a_name" placeholder="Prénom Nom"></div>
+      <div class="fld"><label>Téléphone</label><input id="a_phone" type="tel" placeholder="+223 …"></div>
+      <div class="fld"><label>Adresse email</label><input id="a_email" type="email" autocomplete="email"></div>
+      <div class="fld"><label>Mot de passe (8 caractères min.)</label><input id="a_pass" type="password" autocomplete="new-password"></div>
+      <button class="btn" onclick="doSignup()">Créer mon compte</button>
+      <div class="switch-auth">Déjà un compte ? <button class="link" onclick="renderAuth('login')">Se connecter</button></div>`);
+  }
+}
+async function doLogin(){
+  try{
+    const {error} = await sb.auth.signInWithPassword({email:$('#a_email').value.trim(), password:$('#a_pass').value});
+    if(error) throw error;
+    $('#loader').style.display='flex'; await boot();
+  }catch(e){ err(e); }
+}
+async function doSignup(){
+  try{
+    const name=$('#a_name').value.trim(); if(!name) return toast('Indique ton nom complet');
+    const {data,error} = await sb.auth.signUp({
+      email:$('#a_email').value.trim(), password:$('#a_pass').value,
+      options:{ data:{ full_name:name, phone:$('#a_phone').value.trim() } }
+    });
+    if(error) throw error;
+    if(!data.session){ toast('Compte créé — vérifie ta boîte mail pour confirmer.'); renderAuth('login'); return; }
+    $('#loader').style.display='flex'; await boot();
+  }catch(e){ err(e); }
+}
+async function doLogout(){ await sb.auth.signOut(); location.reload(); }
+
+/* =====================================================================
+   PREMIÈRE CONNEXION — choix du rôle
+===================================================================== */
+function renderChooseRole(){
+  authShell(`
+    <p style="font-size:14px;margin-bottom:12px"><b>Bienvenue ${esc(S.profile?.full_name||'')} !</b><br>Comment veux-tu utiliser Taji ?</p>
+    <button class="btn" onclick="renderOnboarding()">👔 Je suis propriétaire — créer mes stations</button>
+    <button class="btn ghost" onclick="renderJoin()">🧑‍🔧 Je suis gérant — j'ai un code d'invitation</button>
+    <div class="switch-auth"><button class="link" onclick="doLogout()">Se déconnecter</button></div>`);
+}
+function renderJoin(){
+  authShell(`
+    <p style="font-size:14px;margin-bottom:10px"><b>Rejoindre une station</b><br>Saisis le code que ton propriétaire t'a transmis.</p>
+    <div class="fld"><label>Code d'invitation</label><input id="j_code" style="text-transform:uppercase;letter-spacing:3px;font-weight:700" placeholder="EX: TJ4K9P"></div>
+    <button class="btn" onclick="doJoin()">Rejoindre la station</button>
+    <div class="switch-auth"><button class="link" onclick="renderChooseRole()">‹ Retour</button></div>`);
+}
+async function doJoin(){
+  try{
+    const res = await safe(sb.rpc('join_with_invite', {p_code: $('#j_code').value}));
+    if(!res.ok) return toast('⚠ ' + res.error);
+    toast('✔ Station rejointe : ' + res.station_name);
+    $('#loader').style.display='flex'; await loadContext(); renderApp();
+    $('#loader').style.display='none';
+  }catch(e){ err(e); }
+}
+
+/* =====================================================================
+   ONBOARDING PROPRIÉTAIRE — org, station, cuves, pistolets, prix
+===================================================================== */
+const OB = { org:'', st:{name:'',city:''}, tanks:[], nozzles:[], prices:{essence:'',gasoil:''} };
+function renderOnboarding(step=1){
+  const steps = {
+    1: `<p style="font-size:14px;margin-bottom:10px"><b>Étape 1/4 — Ton entreprise</b></p>
+        <div class="fld"><label>Nom de l'entreprise / du réseau</label><input id="ob_org" value="${esc(OB.org)}" placeholder="Ex : Sangaré Distribution"></div>
+        <button class="btn" onclick="OB.org=$('#ob_org').value.trim(); if(!OB.org) return toast('Nom requis'); renderOnboarding(2)">Continuer</button>`,
+    2: `<p style="font-size:14px;margin-bottom:10px"><b>Étape 2/4 — Ta première station</b><br><span style="color:var(--ink3);font-size:12px">Tu pourras en ajouter d'autres dans Réglages.</span></p>
+        <div class="fld"><label>Nom de la station</label><input id="ob_stname" value="${esc(OB.st.name)}" placeholder="Ex : Station Faladié"></div>
+        <div class="fld"><label>Ville / quartier</label><input id="ob_stcity" value="${esc(OB.st.city)}" placeholder="Ex : Bamako — Faladié"></div>
+        <button class="btn" onclick="OB.st={name:$('#ob_stname').value.trim(),city:$('#ob_stcity').value.trim()}; if(!OB.st.name) return toast('Nom requis'); renderOnboarding(3)">Continuer</button>`,
+    3: `<p style="font-size:14px;margin-bottom:10px"><b>Étape 3/4 — Cuves et pistolets</b></p>
+        <div id="ob_tanks">${OB.tanks.map((t,i)=>`
+          <div class="pumphead">🛢 ${esc(t.name)} — ${PRODUITS[t.product]} · ${fmt(t.capacity)} L · stock actuel ${fmt(t.stock)} L
+            <button class="link" style="float:right;color:var(--crit)" onclick="OB.tanks.splice(${i},1);renderOnboarding(3)">retirer</button></div>
+          ${OB.nozzles.filter(n=>n.tank===i).map(n=>`<div style="font-size:12.5px;color:var(--ink2);padding-left:10px">⛽ ${esc(n.name)} — index actuel ${fmt(n.index)}</div>`).join('')}`).join('') || '<p style="font-size:13px;color:var(--ink3)">Aucune cuve pour le moment.</p>'}</div>
+        <div class="card" style="background:var(--page);margin-top:10px">
+          <b style="font-size:13px">Ajouter une cuve</b>
+          <div class="grid2" style="margin-top:8px">
+            <div class="fld"><label>Produit</label><select id="ob_tp"><option value="essence">Essence</option><option value="gasoil">Gasoil</option><option value="petrole">Pétrole</option><option value="melange">Mélange</option></select></div>
+            <div class="fld"><label>Nom</label><input id="ob_tn" placeholder="Cuve 1"></div>
+            <div class="fld"><label>Capacité (L)</label><input id="ob_tc" type="number" inputmode="numeric" placeholder="20000"></div>
+            <div class="fld"><label>Stock actuel (L)</label><input id="ob_ts" type="number" inputmode="numeric" placeholder="12000"></div>
+          </div>
+          <button class="btn ghost small" onclick="obAddTank()">+ Ajouter la cuve</button>
+        </div>
+        ${OB.tanks.length? `<div class="card" style="background:var(--page)">
+          <b style="font-size:13px">Ajouter un pistolet</b>
+          <div class="grid2" style="margin-top:8px">
+            <div class="fld"><label>Cuve</label><select id="ob_nt">${OB.tanks.map((t,i)=>`<option value="${i}">${esc(t.name)} (${PRODUITS[t.product]})</option>`).join('')}</select></div>
+            <div class="fld"><label>Nom</label><input id="ob_nn" placeholder="Pompe 1 · Pistolet A"></div>
+          </div>
+          <div class="fld"><label>Index actuel du compteur</label><input id="ob_ni" type="number" inputmode="numeric" placeholder="1583240"><div class="hint">le chiffre affiché sur la pompe aujourd'hui</div></div>
+          <button class="btn ghost small" onclick="obAddNozzle()">+ Ajouter le pistolet</button>
+        </div>`:''}
+        <button class="btn" onclick="if(!OB.tanks.length||!OB.nozzles.length) return toast('Ajoute au moins une cuve et un pistolet'); renderOnboarding(4)">Continuer</button>`,
+    4: `<p style="font-size:14px;margin-bottom:10px"><b>Étape 4/4 — Prix à la pompe (FCFA / litre)</b></p>
+        ${[...new Set(OB.tanks.map(t=>t.product))].map(p=>`
+          <div class="fld"><label>${PRODUITS[p]}</label><input id="ob_px_${p}" type="number" inputmode="numeric" value="${OB.prices[p]||''}" placeholder="850"></div>`).join('')}
+        <button class="btn" onclick="obFinish()">🚀 Créer ma station</button>`
+  };
+  authShell(steps[step] + `<div class="switch-auth"><button class="link" onclick="${step>1?`renderOnboarding(${step-1})`:'renderChooseRole()'}">‹ Retour</button></div>`);
+}
+function obAddTank(){
+  const t={product:$('#ob_tp').value, name:$('#ob_tn').value.trim()||('Cuve '+(OB.tanks.length+1)), capacity:+$('#ob_tc').value, stock:+$('#ob_ts').value||0};
+  if(!(t.capacity>0)) return toast('Capacité requise');
+  OB.tanks.push(t); renderOnboarding(3);
+}
+function obAddNozzle(){
+  const n={tank:+$('#ob_nt').value, name:$('#ob_nn').value.trim()||('Pistolet '+(OB.nozzles.length+1)), index:+$('#ob_ni').value||0};
+  OB.nozzles.push(n); renderOnboarding(3);
+}
+async function obFinish(){
+  try{
+    $('#loader').style.display='flex';
+    const org = await safe(sb.from('organizations').insert({name:OB.org, owner_id:S.user.id}).select().single());
+    const st = await safe(sb.from('stations').insert({org_id:org.id, name:OB.st.name, city:OB.st.city}).select().single());
+    const tankRows = await safe(sb.from('tanks').insert(OB.tanks.map(t=>({station_id:st.id, product:t.product, name:t.name, capacity_l:t.capacity, initial_stock_l:t.stock}))).select());
+    await safe(sb.from('nozzles').insert(OB.nozzles.map(n=>({station_id:st.id, tank_id:tankRows[n.tank].id, name:n.name, initial_index:n.index}))));
+    const priceRows = [];
+    [...new Set(OB.tanks.map(t=>t.product))].forEach(p=>{
+      const v = +document.getElementById('ob_px_'+p)?.value || +OB.prices[p];
+      if(v>0) priceRows.push({org_id:org.id, product:p, price_fcfa:v, created_by:S.user.id});
+    });
+    if(priceRows.length) await safe(sb.from('prices').insert(priceRows));
+    await loadContext(); S.tab='accueil'; renderApp();
+  }catch(e){ err(e); }
+  $('#loader').style.display='none';
+}
+
+/* =====================================================================
+   COQUILLE PRINCIPALE + NAVIGATION
+===================================================================== */
+function renderApp(){
+  $('#topbar').classList.remove('hidden'); $('#tabbar').classList.remove('hidden');
+  $('#topmeta').innerHTML = `${esc(S.profile?.full_name||'')}<br><span style="color:var(--brand);font-weight:700">${S.isOwner?'Propriétaire':'Gérant'}</span>`;
+  const tabs = S.isOwner
+    ? [['accueil','🏠','Accueil'],['saisie','📝','Saisie'],['credits','📒','Crédits'],['rapports','📊','Rapports'],['reglages','⚙️','Réglages']]
+    : [['saisie','📝','Saisie'],['historique','🗓','Historique'],['credits','📒','Crédits'],['equipe','👥','Équipe'],['reglages','⚙️','Réglages']];
+  $('#tabs').innerHTML = tabs.map(([id,ic,lb])=>`<button class="${S.tab===id?'active':''}" onclick="goTab('${id}')"><span class="ic">${ic}</span>${lb}</button>`).join('');
+  const views = {accueil:renderAccueil, saisie:renderSaisie, credits:renderCredits, rapports:renderRapports, reglages:renderReglages, historique:renderHistorique, equipe:renderEquipe};
+  (views[S.tab] || (S.isOwner?renderAccueil:renderSaisie))();
+}
+function goTab(t){ S.tab=t; renderApp(); }
+</script>
+<script>
+/* =====================================================================
+   DONNÉES MÉTIER — chargements et calculs
+===================================================================== */
+async function loadInfra(stId){
+  if(S.cache['infra_'+stId]) return S.cache['infra_'+stId];
+  const [tanks, nozzles] = await Promise.all([
+    safe(sb.from('tanks').select('*').eq('station_id',stId).eq('active',true).order('created_at')),
+    safe(sb.from('nozzles').select('*').eq('station_id',stId).eq('active',true).order('created_at'))
+  ]);
+  const infra = {tanks, nozzles};
+  S.cache['infra_'+stId] = infra;
+  return infra;
+}
+async function loadDay(stId, day){
+  const [readings, dips, deliveries, cash, closure] = await Promise.all([
+    safe(sb.from('nozzle_readings').select('*').eq('station_id',stId).eq('day',day)),
+    safe(sb.from('tank_dips').select('*').eq('station_id',stId).eq('day',day)),
+    safe(sb.from('deliveries').select('*').eq('station_id',stId).eq('day',day).order('created_at')),
+    safe(sb.from('cash_entries').select('*').eq('station_id',stId).eq('day',day).order('created_at')),
+    safe(sb.from('day_closures').select('*').eq('station_id',stId).eq('day',day).maybeSingle())
+  ]);
+  return {readings, dips, deliveries, cash, closure};
+}
+async function lastClosingIndexes(stId, day, nozzles){
+  const since = addDays(day,-60);
+  const rows = await safe(sb.from('nozzle_readings').select('nozzle_id,day,closing_index')
+    .eq('station_id',stId).lt('day',day).gte('day',since).not('closing_index','is',null)
+    .order('day',{ascending:false}));
+  const map = {};
+  nozzles.forEach(n=>{
+    const r = rows.find(x=>x.nozzle_id===n.id);
+    map[n.id] = r ? +r.closing_index : +n.initial_index;
+  });
+  return map;
+}
+async function tankBaseline(stId, day, tanks){
+  const since = addDays(day,-60);
+  const dipRows = await safe(sb.from('tank_dips').select('tank_id,day,dip_l')
+    .eq('station_id',stId).lt('day',day).gte('day',since).order('day',{ascending:false}));
+  const map = {};
+  for(const t of tanks){
+    const r = dipRows.find(x=>x.tank_id===t.id);
+    map[t.id] = r ? {stock:+r.dip_l, sinceDay:r.day} : {stock:+t.initial_stock_l, sinceDay:null};
+  }
+  return map;
+}
+/* Calcul complet d'une journée (retourne null si relevés incomplets) */
+async function computeDay(st, day, dayData, infra){
+  const {tanks, nozzles} = infra;
+  const {readings, dips, deliveries, cash} = dayData;
+  const openMap = await lastClosingIndexes(st.id, day, nozzles);
+  const base = await tankBaseline(st.id, day, tanks);
+
+  const readingsOk = nozzles.length>0 && nozzles.every(n=> readings.some(r=>r.nozzle_id===n.id && r.closing_index!=null));
+  const dipsOk = tanks.length>0 && tanks.every(t=> dips.some(d=>d.tank_id===t.id));
+  const cashOk = cash.length>0;
+
+  // ventes par cuve/produit
+  const parCuve = {};
+  tanks.forEach(t=> parCuve[t.id] = {tank:t, ventes:0});
+  const parPompiste = {};
+  nozzles.forEach(n=>{
+    const r = readings.find(x=>x.nozzle_id===n.id);
+    if(!r || r.closing_index==null) return;
+    const v = Math.max(0, +r.closing_index - +r.opening_index);
+    if(parCuve[n.tank_id]) parCuve[n.tank_id].ventes += v;
+    if(r.staff_id){ parPompiste[r.staff_id] = (parPompiste[r.staff_id]||0) + v; }
+  });
+  // besoin des ventes intermédiaires entre le dernier jaugeage et ce jour (si trou de plusieurs jours)
+  let ventesL=0, caTheo=0, ecartCuve=0;
+  const lignes = [];
+  const org = orgOf(st);
+  for(const t of tanks){
+    const ventes = parCuve[t.id].ventes;
+    const prix = latestPrice(org.id, t.product, day) || 0;
+    const livraisons = deliveries.filter(d=>d.tank_id===t.id)
+      .reduce((s,d)=> s + (+d.volume_received_l ?? +d.volume_invoiced_l), 0);
+    // ventes + livraisons entre baseline et hier (jours intermédiaires non jaugés)
+    let interVentes=0, interLivr=0;
+    const b = base[t.id];
+    if(b.sinceDay !== null && addDays(b.sinceDay,1) < day){
+      const nozzleIds = nozzles.filter(n=>n.tank_id===t.id).map(n=>n.id);
+      const [interReads, interDeliv] = await Promise.all([
+        safe(sb.from('nozzle_readings').select('nozzle_id,opening_index,closing_index')
+          .eq('station_id',st.id).gt('day',b.sinceDay).lt('day',day).in('nozzle_id',nozzleIds)),
+        safe(sb.from('deliveries').select('tank_id,volume_received_l,volume_invoiced_l')
+          .eq('station_id',st.id).gt('day',b.sinceDay).lt('day',day).eq('tank_id',t.id))
+      ]);
+      interVentes = interReads.reduce((s,r)=> s + Math.max(0,(+r.closing_index||0)-(+r.opening_index||0)),0);
+      interLivr = interDeliv.reduce((s,d)=> s + (+d.volume_received_l ?? +d.volume_invoiced_l),0);
+    }
+    const stockAttendu = b.stock + interLivr - interVentes + livraisons - ventes;
+    const dipRow = dips.find(d=>d.tank_id===t.id);
+    const jauge = dipRow ? +dipRow.dip_l : null;
+    const ec = (jauge!==null) ? (jauge - stockAttendu) : 0;
+    ventesL += ventes; caTheo += ventes*prix; ecartCuve += ec;
+    lignes.push({tank:t, produit:PRODUITS[t.product], ventes, prix, ca:ventes*prix,
+                 stockAttendu, jauge, ecart:ec, livraisons});
+  }
+  const enc = cash.reduce((s,c)=> s + (+c.amount_fcfa||0), 0);
+  const encParMode = {};
+  cash.forEach(c=>{ encParMode[c.method]=(encParMode[c.method]||0)+(+c.amount_fcfa||0); });
+  const ecartCaisse = enc - caTheo;
+  return {ventesL, caTheo, enc, encParMode, ecartCaisse, ecartCuve, lignes, parPompiste,
+          readingsOk, dipsOk, cashOk, complet: readingsOk && dipsOk};
+}
+function statutOf(c){
+  const pc = c.caTheo ? Math.abs(c.ecartCaisse)/c.caTheo : 0;
+  const pv = c.ventesL ? Math.abs(c.ecartCuve)/c.ventesL : 0;
+  if(pc<=0.005 && pv<=0.005) return 'ok';
+  if(pc<=0.015 && pv<=0.02) return 'warn';
+  return 'crit';
+}
+function waReport(st, day, sum){
+  const lab = {ok:'✅ CONFORME', warn:'⚠️ À SURVEILLER', crit:'🔴 ÉCART IMPORTANT'}[sum.statut] || '';
+  return `⛽ *TAJI — Rapport du ${frDateShort(day)}*\n📍 ${st.name}\nStatut : *${lab}*\n\n💧 Litres vendus : *${fmt(sum.ventesL)} L*\n🛢 Écart cuves : *${fmtS(sum.ecartCuve)} L*\n💰 CA théorique : ${fmt(sum.caTheo)} F\n💵 Encaissé : ${fmt(sum.enc)} F\n📊 Écart de caisse : *${fmtS(sum.ecartCaisse)} F*\n\n_Généré par Taji_`;
+}
+
+/* =====================================================================
+   ACCUEIL PROPRIÉTAIRE
+===================================================================== */
+async function renderAccueil(){
+  const day = S.day;
+  const sts = myStations();
+  $('#main').innerHTML = `<h1 class="pg">Vue d'ensemble</h1>
+    <div class="datepick"><input type="date" id="dp" value="${day}" max="${todayISO()}" onchange="S.day=this.value;renderAccueil()">
+    <span style="font-size:12px;color:var(--ink3)">${frDate(day)}</span></div>
+    <div id="ov_tiles" class="tiles"></div><h2 class="sec">Mes stations</h2><div id="ov_list"><div class="card">Chargement…</div></div>
+    <h2 class="sec">Tendance — écart de caisse (14 jours)</h2>
+    <div class="card"><div class="legend" id="legend"></div><div class="chartwrap"><svg id="chart" width="100%" height="180"></svg><div id="tip"></div></div>
+    <div class="note" style="padding:8px 0 0">Basé sur les journées clôturées. Zéro = caisse conforme aux volumes vendus.</div></div>`;
+  if(!sts.length){ $('#ov_list').innerHTML = '<div class="card">Aucune station. Ajoute ta première station dans Réglages.</div>'; return; }
+  try{
+    const closures = await safe(sb.from('day_closures').select('*')
+      .in('station_id', sts.map(s=>s.id)).gte('day', addDays(day,-13)).lte('day', day).eq('status','closed'));
+    let vt=0,ecu=0,eca=0,n=0;
+    const todayRows = sts.map(st=>{
+      const c = closures.find(x=>x.station_id===st.id && x.day===day);
+      if(c){ const s=c.summary; vt+=s.ventesL||0; ecu+=s.ecartCuve||0; eca+=s.ecartCaisse||0; n++; }
+      return {st, c};
+    });
+    $('#ov_tiles').innerHTML = n===0
+      ? `<div class="tile" style="grid-column:1/-1"><div class="lbl">EN ATTENTE</div><div style="font-size:12.5px;color:var(--ink2)">Aucune journée clôturée pour cette date. Les chiffres apparaissent dès la clôture par le gérant.</div></div>`
+      : `<div class="tile"><div class="lbl">LITRES VENDUS</div><div class="val">${fmt(vt)}</div><div class="unit">litres · ${n}/${sts.length} clôturées</div></div>
+         <div class="tile"><div class="lbl">ÉCART CUVES</div><div class="val ${ecu<0?'neg':''}">${fmtS(ecu)}</div><div class="unit">litres</div></div>
+         <div class="tile"><div class="lbl">ÉCART CAISSE</div><div class="val ${eca<0?'neg':''}">${fmtS(eca)}</div><div class="unit">FCFA</div></div>`;
+    $('#ov_list').innerHTML = todayRows.map(({st,c})=>{
+      const s = c?.summary;
+      return `<div class="card" style="cursor:pointer" onclick="renderStationDetail('${st.id}')">
+        <div class="rowline"><div>
+          <div style="font-weight:700">${esc(st.name)}</div>
+          <div style="font-size:12px;color:var(--ink3)">${esc(st.city)}</div>
+          <div style="font-size:12.5px;color:var(--ink2);margin-top:4px">${c
+            ? `${fmt(s.ventesL)} L · écart caisse <b class="${s.ecartCaisse<0?'neg':''}">${fmtS(s.ecartCaisse)} F</b> · écart cuves <b class="${s.ecartCuve<0?'neg':''}">${fmtS(s.ecartCuve)} L</b>`
+            : 'Journée non clôturée'}</div>
+          <div style="margin-top:5px">${CHIP[c ? (s.statut||statutOf(s)) : 'wait']}</div>
+        </div><div style="color:var(--ink3);font-size:18px">›</div></div></div>`;
+    }).join('');
+    drawTrend(sts.slice(0,3), closures, day);
+  }catch(e){ err(e); }
+}
+function drawTrend(sts, closures, day){
+  const svg = $('#chart'); if(!svg) return;
+  const css = getComputedStyle(document.documentElement);
+  const COLS = ['--s1','--s2','--s3'].map(v=>css.getPropertyValue(v).trim());
+  const inkM = css.getPropertyValue('--ink3').trim(), baseC = css.getPropertyValue('--baseline').trim(), surf = css.getPropertyValue('--surface').trim();
+  const days = Array.from({length:14},(_,i)=>addDays(day,i-13));
+  $('#legend').innerHTML = sts.map((st,i)=>`<span class="it"><span class="sw" style="background:${COLS[i]}"></span>${esc(st.name)}</span>`).join('');
+  const series = sts.map(st=> days.map(d=>{ const c = closures.find(x=>x.station_id===st.id && x.day===d); return c ? (c.summary.ecartCaisse||0) : null; }));
+  const all = series.flat().filter(v=>v!==null);
+  const W = svg.clientWidth||400, H=180, mL=8, mR=70, mT=12, mB=20;
+  if(!all.length){ svg.innerHTML = `<text x="${W/2}" y="${H/2}" text-anchor="middle" font-size="12" fill="${inkM}">Pas encore de journées clôturées</text>`; return; }
+  const mn=Math.min(...all,0), mx=Math.max(...all,0), pad=(mx-mn)*0.12||1000;
+  const y=v=> mT+(H-mT-mB)*(1-(v-(mn-pad))/((mx+pad)-(mn-pad)));
+  const x=i=> mL+(W-mL-mR)*i/13;
+  let g = `<line x1="${mL}" y1="${y(0)}" x2="${W-mR}" y2="${y(0)}" stroke="${baseC}" stroke-width="1.5"/>
+           <text x="${W-mR+6}" y="${y(0)+4}" font-size="10" fill="${inkM}">0 F</text>`;
+  [0,4,9,13].forEach(i=> g+=`<text x="${x(i)}" y="${H-4}" font-size="10" fill="${inkM}" text-anchor="middle">${frDateShort(days[i])}</text>`);
+  series.forEach((vals,si)=>{
+    const pts = vals.map((v,i)=> v===null?null:[x(i),y(v),v,i]).filter(Boolean);
+    if(!pts.length) return;
+    g += `<path d="${pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ')}" fill="none" stroke="${COLS[si]}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`;
+    pts.forEach(p=> g+=`<circle cx="${p[0]}" cy="${p[1]}" r="4" fill="${COLS[si]}" stroke="${surf}" stroke-width="2" data-v="${p[2]}" data-s="${si}" data-i="${p[3]}" style="cursor:pointer"/>`);
+    const last = pts[pts.length-1];
+    g += `<text x="${last[0]+8}" y="${last[1]+4}" font-size="10.5" font-weight="700" fill="${COLS[si]}">${fmtS(last[2])}</text>`;
+  });
+  svg.setAttribute('viewBox',`0 0 ${W} ${H}`); svg.innerHTML = g;
+  const tip = $('#tip');
+  svg.querySelectorAll('circle').forEach(c=>{
+    const show=()=>{ const r=c.getBoundingClientRect(), w=svg.parentElement.getBoundingClientRect();
+      tip.style.left=(r.left-w.left+r.width/2)+'px'; tip.style.top=(r.top-w.top)+'px';
+      tip.textContent = sts[+c.dataset.s].name+' · '+frDateShort(days[+c.dataset.i])+' : '+fmtS(+c.dataset.v)+' F'; tip.style.display='block'; };
+    c.addEventListener('mouseenter',show); c.addEventListener('click',e=>{e.stopPropagation();show();});
+    c.addEventListener('mouseleave',()=>tip.style.display='none');
+  });
+}
+
+/* =====================================================================
+   DÉTAIL STATION (propriétaire)
+===================================================================== */
+async function renderStationDetail(stId){
+  const st = S.stations.find(s=>s.id===stId);
+  $('#main').innerHTML = `<button class="back" onclick="renderAccueil()">‹ Retour</button>
+    <h1 class="pg">${esc(st.name)}</h1><div class="sub">${esc(st.city)}</div><div id="sd_body"><div class="card">Chargement…</div></div>`;
+  try{
+    const closures = await safe(sb.from('day_closures').select('*').eq('station_id',stId).order('day',{ascending:false}).limit(30));
+    const today = closures.find(c=>c.day===S.day && c.status==='closed');
+    let h = '';
+    if(today){ h += reportCard(st, S.day, today.summary, true); }
+    else h += `<div class="card"><b>Journée du ${frDateShort(S.day)} non clôturée.</b><div style="font-size:12.5px;color:var(--ink2);margin-top:4px">Le rapport apparaîtra dès la clôture par le gérant (ou toi-même via l'onglet Saisie).</div></div>`;
+    h += `<h2 class="sec">Historique des clôtures</h2><div class="card"><table class="rec">
+      <tr><th>Date</th><th>Litres</th><th>Écart cuves</th><th>Écart caisse</th></tr>`;
+    if(!closures.length) h += `<tr><td colspan="4" style="color:var(--ink3)">Aucune clôture pour l'instant.</td></tr>`;
+    closures.forEach(c=>{
+      const s=c.summary;
+      h += `<tr style="cursor:pointer" onclick='showClosure(${JSON.stringify(stId)},${JSON.stringify(c.day)})'>
+        <td>${frDateShort(c.day)}${c.status==='reopened'?' <span style="color:var(--warn)">↺</span>':''}</td>
+        <td>${fmt(s.ventesL)} L</td>
+        <td class="${(s.ecartCuve||0)<0?'neg':''}">${fmtS(s.ecartCuve)} L</td>
+        <td class="${(s.ecartCaisse||0)<0?'neg':''}">${fmtS(s.ecartCaisse)} F</td></tr>`;
+    });
+    h += `</table></div>`;
+    $('#sd_body').innerHTML = h;
+  }catch(e){ err(e); }
+}
+function reportCard(st, day, sum, withActions){
+  const statut = sum.statut || statutOf(sum);
+  const modes = Object.entries(sum.encParMode||{}).map(([m,v])=>`<tr><td>${METHODES[m]||m}</td><td>${fmt(v)} F</td></tr>`).join('');
+  return `<div class="card">
+    <div class="rowline" style="margin-bottom:8px">${CHIP[statut]}<span style="font-size:11.5px;color:var(--ink3)">Rapport du ${frDateShort(day)}</span></div>
+    <div class="tiles">
+      <div class="tile"><div class="lbl">LITRES</div><div class="val">${fmt(sum.ventesL)}</div><div class="unit">vendus</div></div>
+      <div class="tile"><div class="lbl">ÉCART CUVES</div><div class="val ${sum.ecartCuve<0?'neg':''}">${fmtS(sum.ecartCuve)}</div><div class="unit">litres</div></div>
+      <div class="tile"><div class="lbl">ÉCART CAISSE</div><div class="val ${sum.ecartCaisse<0?'neg':''}">${fmtS(sum.ecartCaisse)}</div><div class="unit">FCFA</div></div>
+    </div>
+    <table class="rec" style="margin-top:10px">
+      ${(sum.lignes||[]).map(l=>`<tr><td>${esc(l.produit)} — ${fmt(l.ventes)} L × ${fmt(l.prix)} F</td><td class="${l.ecart<0?'neg':''}">écart cuve ${fmtS(l.ecart)} L</td></tr>`).join('')}
+      <tr><td>CA théorique</td><td><b>${fmt(sum.caTheo)} F</b></td></tr>
+      ${modes}
+      <tr><td><b>Total encaissé</b></td><td><b>${fmt(sum.enc)} F</b></td></tr>
+      <tr><td><b>Écart de caisse</b></td><td class="${sum.ecartCaisse<0?'neg':'pos'}"><b>${fmtS(sum.ecartCaisse)} F</b></td></tr>
+    </table>
+    ${withActions?`
+    <a class="btn ghost" style="text-decoration:none;text-align:center" target="_blank" rel="noopener"
+       href="https://wa.me/?text=${encodeURIComponent(waReport(st, day, {...sum, statut}))}">📤 Partager sur WhatsApp</a>
+    ${S.isOwner?`<button class="btn danger" onclick="reopenDay('${st.id}','${day}')">↺ Rouvrir cette journée (correction)</button>`:''}`:''}
+  </div>`;
+}
+async function showClosure(stId, day){
+  try{
+    const st = S.stations.find(s=>s.id===stId);
+    const c = await safe(sb.from('day_closures').select('*').eq('station_id',stId).eq('day',day).maybeSingle());
+    if(!c) return;
+    $('#main').innerHTML = `<button class="back" onclick="renderStationDetail('${stId}')">‹ Retour</button>
+      <h1 class="pg">${esc(st.name)}</h1><div class="sub">${frDate(day)}</div>` + reportCard(st, day, c.summary, c.status==='closed');
+  }catch(e){ err(e); }
+}
+async function reopenDay(stId, day){
+  if(!confirm('Rouvrir cette journée ? Le gérant pourra modifier les relevés, puis il faudra re-clôturer.')) return;
+  try{
+    await safe(sb.from('day_closures').update({status:'reopened'}).eq('station_id',stId).eq('day',day));
+    await safe(sb.from('audit_log').insert({station_id:stId, action:'reouverture', entity:'day_closures', entity_id:day, detail:{par:S.profile?.full_name}}));
+    toast('Journée rouverte'); renderStationDetail(stId);
+  }catch(e){ err(e); }
+}
+
+/* =====================================================================
+   SAISIE DU JOUR (gérant + propriétaire)
+===================================================================== */
+async function renderSaisie(){
+  const sts = myStations();
+  if(!sts.length){ $('#main').innerHTML='<div class="card">Aucune station accessible.</div>'; return; }
+  if(!S.gerStation || !sts.some(s=>s.id===S.gerStation)) S.gerStation = sts[0].id;
+  const st = sts.find(s=>s.id===S.gerStation);
+  $('#main').innerHTML = `<h1 class="pg">Saisie du jour</h1>
+    <div class="datepick">
+      <select id="sg_st" style="flex:1;padding:9px 10px;font-size:14px;font-weight:600;border:1.5px solid var(--grid);border-radius:10px;background:var(--surface);color:var(--ink1)"
+        onchange="S.gerStation=this.value;renderSaisie()">${sts.map(s=>`<option value="${s.id}" ${s.id===S.gerStation?'selected':''}>⛽ ${esc(s.name)}</option>`).join('')}</select>
+      <input type="date" id="sg_day" value="${S.day}" max="${todayISO()}" onchange="S.day=this.value;renderSaisie()">
+    </div><div id="sg_body"><div class="card">Chargement…</div></div>`;
+  try{
+    const infra = await loadInfra(st.id);
+    const dayData = await loadDay(st.id, S.day);
+    const staff = await safe(sb.from('staff').select('*').eq('station_id',st.id).eq('active',true));
+    const clients = await safe(sb.from('credit_clients').select('*').eq('org_id',st.org_id).eq('active',true));
+    if(dayData.closure && dayData.closure.status==='closed'){
+      const sum = dayData.closure.summary;
+      $('#sg_body').innerHTML = `<div class="card" style="text-align:center;font-weight:700;color:var(--good-text)">✅ Journée clôturée</div>` + reportCard(st, S.day, sum, true);
+      return;
+    }
+    const openMap = await lastClosingIndexes(st.id, S.day, infra.nozzles);
+    const staffOpts = sid => `<option value="">— Pompiste (optionnel) —</option>` + staff.map(p=>`<option value="${p.id}" ${sid===p.id?'selected':''}>${esc(p.full_name)}</option>`).join('');
+    const rOf = n => dayData.readings.find(r=>r.nozzle_id===n.id);
+    const dOf = t => dayData.dips.find(d=>d.tank_id===t.id);
+    const cashOf = m => dayData.cash.find(c=>c.method===m && !c.credit_client_id);
+    const done1 = infra.nozzles.every(n=> rOf(n)?.closing_index!=null);
+    const done2 = infra.tanks.every(t=> dOf(t));
+    const done3 = dayData.cash.length>0;
+    let h = `
+    <div class="stepcard ${done1?'':'open'}"><div class="step-h" onclick="this.parentElement.classList.toggle('open')">
+      <div class="num ${done1?'done':''}">${done1?'✓':'1'}</div><div class="t">Index des pompes</div><div class="st">${frDateShort(S.day)}</div></div>
+      <div class="step-b">${infra.nozzles.map(n=>{
+        const r = rOf(n);
+        return `<div class="pumphead">⛽ ${esc(n.name)}</div>
+        <div class="grid2">
+          <div class="fld"><label>Ouverture</label><input type="number" inputmode="decimal" id="op_${n.id}" value="${r? +r.opening_index : openMap[n.id]}"><div class="hint">repris du dernier relevé</div></div>
+          <div class="fld"><label>Fermeture</label><input type="number" inputmode="decimal" id="cl_${n.id}" value="${r&&r.closing_index!=null? +r.closing_index : ''}" placeholder="index ce soir"></div>
+        </div>
+        <div class="fld"><select id="stf_${n.id}">${staffOpts(r?.staff_id)}</select></div>`;
+      }).join('')}
+      <button class="btn" onclick="savePompes('${st.id}')">Enregistrer les index</button></div></div>
+
+    <div class="stepcard"><div class="step-h" onclick="this.parentElement.classList.toggle('open')">
+      <div class="num ${done2?'done':''}">${done2?'✓':'2'}</div><div class="t">Cuves & livraisons</div><div class="st">en litres</div></div>
+      <div class="step-b">${infra.tanks.map(t=>{
+        const d = dOf(t);
+        return `<div class="pumphead">🛢 ${esc(t.name)} — ${PRODUITS[t.product]} (cap. ${fmt(t.capacity_l)} L)</div>
+        <div class="fld"><label>Jauge relevée aujourd'hui (L)</label><input type="number" inputmode="decimal" id="dip_${t.id}" value="${d? +d.dip_l : ''}" placeholder="niveau mesuré"></div>`;
+      }).join('')}
+      <div class="pumphead">🚚 Livraison reçue aujourd'hui (laisser vide si aucune)</div>
+      <div class="grid2">
+        <div class="fld"><label>Cuve</label><select id="dl_tank">${infra.tanks.map(t=>`<option value="${t.id}">${esc(t.name)} (${PRODUITS[t.product]})</option>`).join('')}</select></div>
+        <div class="fld"><label>Fournisseur</label><input id="dl_sup" placeholder="ex : NDC"></div>
+        <div class="fld"><label>Volume facturé (BL)</label><input type="number" inputmode="decimal" id="dl_inv" placeholder="L"></div>
+        <div class="fld"><label>Volume reçu (mesuré)</label><input type="number" inputmode="decimal" id="dl_rec" placeholder="L"></div>
+      </div>
+      ${dayData.deliveries.map(d=>{ const t=infra.tanks.find(x=>x.id===d.tank_id);
+        return `<div style="font-size:12.5px;color:var(--ink2);padding:4px 0">🚚 ${esc(t?.name||'')} · ${esc(d.supplier)} · facturé ${fmt(d.volume_invoiced_l)} L · reçu ${d.volume_received_l!=null?fmt(d.volume_received_l)+' L':'—'}
+          <button class="link" style="color:var(--crit)" onclick="delDelivery('${d.id}','${st.id}')">retirer</button></div>`; }).join('')}
+      <button class="btn" onclick="saveCuves('${st.id}')">Enregistrer cuves & livraison</button></div></div>
+
+    <div class="stepcard"><div class="step-h" onclick="this.parentElement.classList.toggle('open')">
+      <div class="num ${done3?'done':''}">${done3?'✓':'3'}</div><div class="t">Encaissements</div><div class="st">FCFA</div></div>
+      <div class="step-b">
+      <div class="grid2">
+        ${['especes','orange_money','moov_money'].map(m=>`<div class="fld"><label>${METHODES[m]}</label>
+          <input type="number" inputmode="numeric" id="csh_${m}" value="${cashOf(m)? +cashOf(m).amount_fcfa : ''}" placeholder="0"></div>`).join('')}
+      </div>
+      <div class="pumphead">📒 Ventes à crédit du jour</div>
+      ${clients.length? `<div class="grid2">
+        <div class="fld"><label>Client</label><select id="cr_client">${clients.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></div>
+        <div class="fld"><label>Montant (FCFA)</label><input type="number" inputmode="numeric" id="cr_amt" placeholder="0"></div>
+      </div><button class="btn ghost small" onclick="addCreditSale('${st.id}')">+ Ajouter la vente à crédit</button>`
+      : `<div style="font-size:12.5px;color:var(--ink3)">Aucun client à crédit. Crée-les dans l'onglet Crédits.</div>`}
+      ${dayData.cash.filter(c=>c.method==='credit').map(c=>{ const cl=clients.find(x=>x.id===c.credit_client_id);
+        return `<div style="font-size:12.5px;color:var(--ink2);padding:4px 0">📒 ${esc(cl?.name||'client')} : ${fmt(c.amount_fcfa)} F
+        <button class="link" style="color:var(--crit)" onclick="delCash('${c.id}')">retirer</button></div>`; }).join('')}
+      <button class="btn" onclick="saveCaisse('${st.id}')">Enregistrer la caisse</button></div></div>
+
+    <button class="btn" id="btn_close" ${done1&&done2?'':'disabled'} onclick="doCloture('${st.id}')">✅ Clôturer la journée</button>
+    <div id="preview"></div>
+    <div class="note">Les relevés restent modifiables jusqu'à la clôture. Après clôture, seul le propriétaire peut rouvrir la journée.</div>`;
+    $('#sg_body').innerHTML = h;
+    S.cache.saisie = {infra, dayData, staff, clients, st};
+  }catch(e){ err(e); }
+}
+async function savePompes(stId){
+  try{
+    const {infra} = S.cache.saisie;
+    const rows = [];
+    for(const n of infra.nozzles){
+      const op = parseFloat($('#op_'+n.id).value), cl = $('#cl_'+n.id).value===''? null : parseFloat($('#cl_'+n.id).value);
+      if(isNaN(op) || op<0) return toast('Index ouverture invalide — '+n.name);
+      if(cl!==null && cl<op) return toast('⚠ '+n.name+' : fermeture < ouverture');
+      if(cl!==null && cl-op > 40000) if(!confirm(`${n.name} : ${fmt(cl-op)} L vendus — c'est inhabituel. Confirmer ?`)) return;
+      rows.push({station_id:stId, nozzle_id:n.id, day:S.day, shift_label:'journee',
+                 opening_index:op, closing_index:cl, staff_id:$('#stf_'+n.id).value||null, entered_by:S.user.id});
+    }
+    await safe(sb.from('nozzle_readings').upsert(rows, {onConflict:'nozzle_id,day,shift_label'}));
+    toast('✔ Index enregistrés'); renderSaisie();
+  }catch(e){ err(e); }
+}
+async function saveCuves(stId){
+  try{
+    const {infra} = S.cache.saisie;
+    const rows = [];
+    for(const t of infra.tanks){
+      const v = $('#dip_'+t.id).value;
+      if(v==='') continue;
+      const d = parseFloat(v);
+      if(isNaN(d)||d<0) return toast('Jauge invalide — '+t.name);
+      if(d > +t.capacity_l) return toast('⚠ '+t.name+' : jauge > capacité de la cuve');
+      rows.push({station_id:stId, tank_id:t.id, day:S.day, dip_l:d, entered_by:S.user.id});
+    }
+    if(rows.length) await safe(sb.from('tank_dips').upsert(rows, {onConflict:'tank_id,day'}));
+    const inv = $('#dl_inv').value;
+    if(inv!==''){
+      await safe(sb.from('deliveries').insert({station_id:stId, tank_id:$('#dl_tank').value, day:S.day,
+        supplier:$('#dl_sup').value.trim(), volume_invoiced_l:parseFloat(inv)||0,
+        volume_received_l: $('#dl_rec').value===''? null : parseFloat($('#dl_rec').value), entered_by:S.user.id}));
+    }
+    toast('✔ Cuves enregistrées'); renderSaisie();
+  }catch(e){ err(e); }
+}
+async function delDelivery(id){ try{ await safe(sb.from('deliveries').delete().eq('id',id)); renderSaisie(); }catch(e){ err(e);} }
+async function delCash(id){ try{ await safe(sb.from('cash_entries').delete().eq('id',id)); renderSaisie(); }catch(e){ err(e);} }
+async function saveCaisse(stId){
+  try{
+    const {dayData} = S.cache.saisie;
+    for(const m of ['especes','orange_money','moov_money']){
+      const v = $('#csh_'+m).value; if(v==='') continue;
+      const amt = parseFloat(v)||0;
+      const existing = dayData.cash.find(c=>c.method===m && !c.credit_client_id);
+      if(existing) await safe(sb.from('cash_entries').update({amount_fcfa:amt}).eq('id',existing.id));
+      else await safe(sb.from('cash_entries').insert({station_id:stId, day:S.day, method:m, amount_fcfa:amt, entered_by:S.user.id}));
+    }
+    toast('✔ Caisse enregistrée'); renderSaisie();
+  }catch(e){ err(e); }
+}
+async function addCreditSale(stId){
+  try{
+    const amt = parseFloat($('#cr_amt').value);
+    if(!(amt>0)) return toast('Montant requis');
+    await safe(sb.from('cash_entries').insert({station_id:stId, day:S.day, method:'credit',
+      amount_fcfa:amt, credit_client_id:$('#cr_client').value, entered_by:S.user.id}));
+    toast('✔ Vente à crédit ajoutée'); renderSaisie();
+  }catch(e){ err(e); }
+}
+async function doCloture(stId){
+  try{
+    $('#btn_close').disabled = true;
+    const st = S.stations.find(s=>s.id===stId);
+    const infra = await loadInfra(stId);
+    const dayData = await loadDay(stId, S.day);
+    const c = await computeDay(st, S.day, dayData, infra);
+    if(!c.complet){ toast('⚠ Il manque des relevés (index de fermeture ou jauges).'); $('#btn_close').disabled=false; return; }
+    if(!c.cashOk && !confirm('Aucun encaissement saisi. Clôturer quand même ?')){ $('#btn_close').disabled=false; return; }
+    const summary = {ventesL:c.ventesL, caTheo:c.caTheo, enc:c.enc, encParMode:c.encParMode,
+      ecartCaisse:c.ecartCaisse, ecartCuve:c.ecartCuve, statut:statutOf(c),
+      lignes:c.lignes.map(l=>({produit:l.produit, ventes:l.ventes, prix:l.prix, ca:l.ca, ecart:l.ecart, jauge:l.jauge, stockAttendu:l.stockAttendu})),
+      parPompiste:c.parPompiste};
+    if(dayData.closure && dayData.closure.status==='reopened'){
+      await safe(sb.from('day_closures').update({status:'closed', summary, closed_by:S.user.id, closed_at:new Date().toISOString()}).eq('id',dayData.closure.id));
+    } else {
+      await safe(sb.from('day_closures').insert({station_id:stId, day:S.day, closed_by:S.user.id, summary}));
+    }
+    await safe(sb.from('audit_log').insert({station_id:stId, action:'cloture', entity:'day_closures', entity_id:S.day,
+      detail:{ecartCaisse:c.ecartCaisse, ecartCuve:c.ecartCuve, par:S.profile?.full_name}}));
+    toast('✅ Journée clôturée'); renderSaisie();
+  }catch(e){ err(e); const b=$('#btn_close'); if(b) b.disabled=false; }
+}
+
+/* =====================================================================
+   HISTORIQUE (gérant)
+===================================================================== */
+async function renderHistorique(){
+  const sts = myStations();
+  if(!S.gerStation || !sts.some(s=>s.id===S.gerStation)) S.gerStation = sts[0]?.id;
+  const st = sts.find(s=>s.id===S.gerStation);
+  $('#main').innerHTML = `<h1 class="pg">Historique</h1><div class="sub">${esc(st?.name||'')}</div><div id="h_body"><div class="card">Chargement…</div></div>`;
+  if(!st) return;
+  try{
+    const closures = await safe(sb.from('day_closures').select('*').eq('station_id',st.id).order('day',{ascending:false}).limit(30));
+    $('#h_body').innerHTML = closures.length? `<div class="card"><table class="rec">
+      <tr><th>Date</th><th>Litres</th><th>Écart caisse</th></tr>
+      ${closures.map(c=>`<tr style="cursor:pointer" onclick='showClosureG(${JSON.stringify(st.id)},${JSON.stringify(c.day)})'>
+        <td>${frDateShort(c.day)}</td><td>${fmt(c.summary.ventesL)} L</td>
+        <td class="${(c.summary.ecartCaisse||0)<0?'neg':''}">${fmtS(c.summary.ecartCaisse)} F</td></tr>`).join('')}
+    </table></div>` : '<div class="card">Aucune journée clôturée pour l\'instant.</div>';
+  }catch(e){ err(e); }
+}
+async function showClosureG(stId, day){
+  const st = S.stations.find(s=>s.id===stId);
+  const c = await safe(sb.from('day_closures').select('*').eq('station_id',stId).eq('day',day).maybeSingle());
+  $('#main').innerHTML = `<button class="back" onclick="renderHistorique()">‹ Retour</button>
+    <h1 class="pg">${esc(st.name)}</h1><div class="sub">${frDate(day)}</div>` + reportCard(st, day, c.summary, false);
+}
+</script>
+<script>
+/* =====================================================================
+   CRÉDITS CLIENTS B2B
+===================================================================== */
+async function renderCredits(){
+  const sts = myStations();
+  const orgIds = [...new Set(sts.map(s=>s.org_id))];
+  $('#main').innerHTML = `<h1 class="pg">Crédits clients</h1><div class="sub">Transporteurs, entreprises, clients réguliers</div><div id="cr_body"><div class="card">Chargement…</div></div>`;
+  if(!orgIds.length){ $('#cr_body').innerHTML='<div class="card">Aucune organisation.</div>'; return; }
+  try{
+    const [clients, sales, pays] = await Promise.all([
+      safe(sb.from('credit_clients').select('*').in('org_id',orgIds).order('name')),
+      safe(sb.from('cash_entries').select('credit_client_id,amount_fcfa').eq('method','credit').not('credit_client_id','is',null)),
+      safe(sb.from('credit_payments').select('credit_client_id,amount_fcfa'))
+    ]);
+    const encours = id => sales.filter(s=>s.credit_client_id===id).reduce((a,b)=>a+ +b.amount_fcfa,0)
+                        - pays.filter(p=>p.credit_client_id===id).reduce((a,b)=>a+ +b.amount_fcfa,0);
+    const total = clients.filter(c=>c.active).reduce((a,c)=>a+encours(c.id),0);
+    let h = `<div class="card"><div class="lbl" style="font-size:11px;color:var(--ink3);font-weight:700">ENCOURS TOTAL</div>
+      <div class="bignum ${total>0?'neg':''}">${fmt(total)} F</div>
+      <div style="font-size:12px;color:var(--ink3)">montant dû par l'ensemble des clients</div></div>`;
+    h += `<div class="card">`;
+    if(!clients.length) h += `<p style="font-size:13px;color:var(--ink3)">Aucun client à crédit. Ajoute le premier ci-dessous.</p>`;
+    clients.filter(c=>c.active).forEach(c=>{
+      const e = encours(c.id);
+      const depasse = +c.plafond_fcfa>0 && e > +c.plafond_fcfa;
+      h += `<div class="listrow" style="cursor:pointer" onclick="renderClientDetail('${c.id}')">
+        <div><div class="t">${esc(c.name)} ${depasse?'<span class="chip crit" style="font-size:10px">plafond dépassé</span>':''}</div>
+        <div class="m">${esc(c.phone||'')}${+c.plafond_fcfa>0? ' · plafond '+fmt(c.plafond_fcfa)+' F':''}</div></div>
+        <div style="text-align:right"><b class="${e>0?'neg':''}">${fmt(e)} F</b><div class="m">encours</div></div></div>`;
+    });
+    h += `</div>
+    <h2 class="sec">Nouveau client</h2>
+    <div class="card"><div class="grid2">
+      <div class="fld"><label>Nom</label><input id="nc_name" placeholder="Ex : Transport Diallo"></div>
+      <div class="fld"><label>Téléphone</label><input id="nc_phone" type="tel" placeholder="+223 …"></div>
+    </div>
+    <div class="fld"><label>Plafond de crédit (FCFA, 0 = illimité)</label><input id="nc_plaf" type="number" inputmode="numeric" value="0"></div>
+    <button class="btn" onclick="addClient('${orgIds[0]}')">+ Ajouter le client</button></div>`;
+    $('#cr_body').innerHTML = h;
+    S.cache.credits = {clients, sales, pays};
+  }catch(e){ err(e); }
+}
+async function addClient(orgId){
+  try{
+    const name = $('#nc_name').value.trim(); if(!name) return toast('Nom requis');
+    await safe(sb.from('credit_clients').insert({org_id:orgId, name, phone:$('#nc_phone').value.trim(), plafond_fcfa:+$('#nc_plaf').value||0}));
+    toast('✔ Client ajouté'); renderCredits();
+  }catch(e){ err(e); }
+}
+async function renderClientDetail(cid){
+  try{
+    const c = await safe(sb.from('credit_clients').select('*').eq('id',cid).single());
+    const [sales, pays] = await Promise.all([
+      safe(sb.from('cash_entries').select('*').eq('credit_client_id',cid).order('day',{ascending:false}).limit(60)),
+      safe(sb.from('credit_payments').select('*').eq('credit_client_id',cid).order('day',{ascending:false}).limit(60))
+    ]);
+    const enc = sales.reduce((a,b)=>a+ +b.amount_fcfa,0) - pays.reduce((a,b)=>a+ +b.amount_fcfa,0);
+    const moves = [
+      ...sales.map(s=>({day:s.day, lbl:'Vente à crédit', amt:+s.amount_fcfa, neg:true})),
+      ...pays.map(p=>({day:p.day, lbl:'Remboursement ('+(METHODES[p.method]||p.method).replace(/^.\s/,'')+')', amt:+p.amount_fcfa, neg:false}))
+    ].sort((a,b)=> a.day<b.day?1:-1);
+    const sts = myStations();
+    $('#main').innerHTML = `<button class="back" onclick="renderCredits()">‹ Retour aux crédits</button>
+      <h1 class="pg">${esc(c.name)}</h1><div class="sub">${esc(c.phone||'')}</div>
+      <div class="card"><div style="font-size:11px;color:var(--ink3);font-weight:700">ENCOURS ACTUEL</div>
+        <div class="bignum ${enc>0?'neg':''}">${fmt(enc)} F</div>
+        ${+c.plafond_fcfa>0?`<div style="font-size:12px;color:var(--ink3)">plafond : ${fmt(c.plafond_fcfa)} F</div>`:''}</div>
+      <div class="card"><b style="font-size:13.5px">Enregistrer un remboursement</b>
+        <div class="grid2" style="margin-top:8px">
+          <div class="fld"><label>Montant (FCFA)</label><input id="rp_amt" type="number" inputmode="numeric"></div>
+          <div class="fld"><label>Mode</label><select id="rp_m"><option value="especes">Espèces</option><option value="orange_money">Orange Money</option><option value="moov_money">Moov Money</option><option value="autre">Autre</option></select></div>
+        </div>
+        <button class="btn" onclick="addPayment('${cid}','${sts[0]?.id||''}')">💰 Enregistrer le remboursement</button></div>
+      <h2 class="sec">Mouvements</h2>
+      <div class="card"><table class="rec"><tr><th>Date</th><th>Opération</th><th>Montant</th></tr>
+        ${moves.length? moves.map(m=>`<tr><td>${frDateShort(m.day)}</td><td>${m.lbl}</td>
+          <td class="${m.neg?'neg':'pos'}">${m.neg?'+':'−'}${fmt(m.amt)} F</td></tr>`).join('')
+        : '<tr><td colspan="3" style="color:var(--ink3)">Aucun mouvement.</td></tr>'}</table></div>`;
+  }catch(e){ err(e); }
+}
+async function addPayment(cid, stId){
+  try{
+    const amt = parseFloat($('#rp_amt').value); if(!(amt>0)) return toast('Montant requis');
+    await safe(sb.from('credit_payments').insert({credit_client_id:cid, station_id:stId||null, day:todayISO(),
+      amount_fcfa:amt, method:$('#rp_m').value, entered_by:S.user.id}));
+    toast('✔ Remboursement enregistré'); renderClientDetail(cid);
+  }catch(e){ err(e); }
+}
+
+/* =====================================================================
+   ÉQUIPE & QUARTS
+===================================================================== */
+async function renderEquipe(){
+  const sts = myStations();
+  if(!S.gerStation || !sts.some(s=>s.id===S.gerStation)) S.gerStation = sts[0]?.id;
+  const st = sts.find(s=>s.id===S.gerStation);
+  $('#main').innerHTML = `<h1 class="pg">Équipe</h1>
+    <div class="datepick"><select id="eq_st" style="flex:1;padding:9px 10px;font-size:14px;font-weight:600;border:1.5px solid var(--grid);border-radius:10px;background:var(--surface);color:var(--ink1)"
+      onchange="S.gerStation=this.value;renderEquipe()">${sts.map(s=>`<option value="${s.id}" ${s.id===S.gerStation?'selected':''}>⛽ ${esc(s.name)}</option>`).join('')}</select></div>
+    <div id="eq_body"><div class="card">Chargement…</div></div>`;
+  if(!st) return;
+  try{
+    const moisDebut = S.day.slice(0,8)+'01';
+    const [staff, readings] = await Promise.all([
+      safe(sb.from('staff').select('*').eq('station_id',st.id).order('created_at')),
+      safe(sb.from('nozzle_readings').select('staff_id,opening_index,closing_index').eq('station_id',st.id)
+        .gte('day',moisDebut).lte('day',S.day).not('staff_id','is',null).not('closing_index','is',null))
+    ]);
+    const litres = id => readings.filter(r=>r.staff_id===id).reduce((a,r)=>a+Math.max(0,+r.closing_index - +r.opening_index),0);
+    let h = `<h2 class="sec">Pompistes — litres servis ce mois</h2><div class="card">`;
+    if(!staff.length) h += `<p style="font-size:13px;color:var(--ink3)">Aucun pompiste enregistré. Ajoute ton équipe ci-dessous, puis associe un pompiste à chaque pistolet dans la Saisie du jour.</p>`;
+    staff.filter(p=>p.active).forEach(p=>{
+      h += `<div class="listrow"><div><div class="t">${esc(p.full_name)}</div><div class="m">${esc(p.phone||'')} · ${p.role}</div></div>
+        <div style="text-align:right"><b>${fmt(litres(p.id))} L</b>
+        <div class="m"><button class="link" style="color:var(--crit);font-size:11px" onclick="toggleStaff('${p.id}',false)">désactiver</button></div></div></div>`;
+    });
+    const inactifs = staff.filter(p=>!p.active);
+    if(inactifs.length) h += inactifs.map(p=>`<div class="listrow" style="opacity:.5"><div class="t">${esc(p.full_name)} (inactif)</div>
+      <button class="link" onclick="toggleStaff('${p.id}',true)">réactiver</button></div>`).join('');
+    h += `</div>
+    <h2 class="sec">Ajouter un membre</h2>
+    <div class="card"><div class="grid2">
+      <div class="fld"><label>Nom complet</label><input id="sf_name" placeholder="Prénom Nom"></div>
+      <div class="fld"><label>Téléphone</label><input id="sf_phone" type="tel" placeholder="+223 …"></div>
+    </div>
+    <div class="fld"><label>Rôle</label><select id="sf_role"><option value="pompiste">Pompiste</option><option value="caissier">Caissier</option><option value="autre">Autre</option></select></div>
+    <button class="btn" onclick="addStaff('${st.id}')">+ Ajouter</button></div>
+    <div class="note">Astuce : en associant un pompiste à chaque pistolet lors de la saisie, les litres servis (et les écarts) deviennent traçables par personne.</div>`;
+    $('#eq_body').innerHTML = h;
+  }catch(e){ err(e); }
+}
+async function addStaff(stId){
+  try{
+    const name = $('#sf_name').value.trim(); if(!name) return toast('Nom requis');
+    await safe(sb.from('staff').insert({station_id:stId, full_name:name, phone:$('#sf_phone').value.trim(), role:$('#sf_role').value}));
+    toast('✔ Membre ajouté'); renderEquipe();
+  }catch(e){ err(e); }
+}
+async function toggleStaff(id, active){
+  try{ await safe(sb.from('staff').update({active}).eq('id',id)); renderEquipe(); }catch(e){ err(e); }
+}
+
+/* =====================================================================
+   RAPPORTS & EXPORTS (propriétaire)
+===================================================================== */
+async function renderRapports(){
+  const sts = myStations();
+  const mois = S.moisRapport || todayISO().slice(0,7);
+  $('#main').innerHTML = `<h1 class="pg">Rapports</h1>
+    <div class="datepick"><input type="month" id="rp_mois" value="${mois}" max="${todayISO().slice(0,7)}"
+      onchange="S.moisRapport=this.value;renderRapports()"></div>
+    <div id="rp_body"><div class="card">Chargement…</div></div>`;
+  if(!sts.length){ $('#rp_body').innerHTML='<div class="card">Aucune station.</div>'; return; }
+  try{
+    const d1 = mois+'-01', d2 = mois+'-31';
+    const closures = await safe(sb.from('day_closures').select('*').in('station_id',sts.map(s=>s.id))
+      .gte('day',d1).lte('day',d2).eq('status','closed').order('day'));
+    let h='';
+    let T={v:0,ca:0,enc:0,ec:0,cu:0};
+    h += `<div class="card"><table class="rec"><tr><th>Station</th><th>Jours</th><th>Litres</th><th>Écart caisse</th></tr>`;
+    sts.forEach(st=>{
+      const cs = closures.filter(c=>c.station_id===st.id);
+      const v = cs.reduce((a,c)=>a+(c.summary.ventesL||0),0);
+      const ca = cs.reduce((a,c)=>a+(c.summary.caTheo||0),0);
+      const enc = cs.reduce((a,c)=>a+(c.summary.enc||0),0);
+      const ec = cs.reduce((a,c)=>a+(c.summary.ecartCaisse||0),0);
+      const cu = cs.reduce((a,c)=>a+(c.summary.ecartCuve||0),0);
+      T.v+=v;T.ca+=ca;T.enc+=enc;T.ec+=ec;T.cu+=cu;
+      h += `<tr><td>${esc(st.name)}</td><td>${cs.length}</td><td>${fmt(v)} L</td><td class="${ec<0?'neg':''}">${fmtS(ec)} F</td></tr>`;
+    });
+    h += `<tr><td><b>Total</b></td><td></td><td><b>${fmt(T.v)} L</b></td><td class="${T.ec<0?'neg':''}"><b>${fmtS(T.ec)} F</b></td></tr></table></div>`;
+    h += `<div class="tiles">
+      <div class="tile"><div class="lbl">CA THÉORIQUE</div><div class="val">${fmt(T.ca/1000000)}</div><div class="unit">millions F</div></div>
+      <div class="tile"><div class="lbl">ENCAISSÉ</div><div class="val">${fmt(T.enc/1000000)}</div><div class="unit">millions F</div></div>
+      <div class="tile"><div class="lbl">ÉCART CUVES</div><div class="val ${T.cu<0?'neg':''}">${fmtS(T.cu)}</div><div class="unit">litres</div></div>
+    </div>
+    <h2 class="sec">Exports (pour le comptable)</h2>
+    <div class="card">
+      <button class="btn ghost" onclick="exportClosuresCSV('${mois}')">⬇ Synthèses quotidiennes (CSV)</button>
+      <button class="btn ghost" onclick="exportDetailCSV('${mois}')">⬇ Détail relevés & encaissements (CSV)</button>
+    </div>`;
+    $('#rp_body').innerHTML = h;
+    S.cache.rapport = {closures, mois};
+  }catch(e){ err(e); }
+}
+function dlCSV(name, rows){
+  const csv = rows.map(r=>r.map(v=>{ v = v==null?'':String(v); return /[";\n]/.test(v)? '"'+v.replace(/"/g,'""')+'"' : v; }).join(';')).join('\n');
+  const blob = new Blob(['﻿'+csv], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click();
+  URL.revokeObjectURL(a.href);
+}
+function exportClosuresCSV(mois){
+  const {closures} = S.cache.rapport;
+  const rows = [['Date','Station','Litres vendus','CA théorique (F)','Encaissé (F)','Écart caisse (F)','Écart cuves (L)','Statut']];
+  closures.forEach(c=>{
+    const st = S.stations.find(s=>s.id===c.station_id);
+    rows.push([c.day, st?.name, Math.round(c.summary.ventesL||0), Math.round(c.summary.caTheo||0),
+      Math.round(c.summary.enc||0), Math.round(c.summary.ecartCaisse||0), Math.round(c.summary.ecartCuve||0), c.summary.statut]);
+  });
+  dlCSV(`taji_syntheses_${mois}.csv`, rows);
+}
+async function exportDetailCSV(mois){
+  try{
+    const sts = myStations(); const d1 = mois+'-01', d2 = mois+'-31';
+    const [reads, cash] = await Promise.all([
+      safe(sb.from('nozzle_readings').select('*, nozzles(name)').in('station_id',sts.map(s=>s.id)).gte('day',d1).lte('day',d2).order('day')),
+      safe(sb.from('cash_entries').select('*').in('station_id',sts.map(s=>s.id)).gte('day',d1).lte('day',d2).order('day'))
+    ]);
+    const rows = [['Type','Date','Station','Détail','Ouverture','Fermeture','Litres','Mode','Montant (F)']];
+    reads.forEach(r=>{
+      const st = S.stations.find(s=>s.id===r.station_id);
+      rows.push(['Relevé pompe', r.day, st?.name, r.nozzles?.name, r.opening_index, r.closing_index,
+        r.closing_index!=null? Math.round(r.closing_index-r.opening_index):'', '', '']);
+    });
+    cash.forEach(c=>{
+      const st = S.stations.find(s=>s.id===c.station_id);
+      rows.push(['Encaissement', c.day, st?.name, '', '', '', '', c.method, Math.round(c.amount_fcfa)]);
+    });
+    dlCSV(`taji_detail_${mois}.csv`, rows);
+  }catch(e){ err(e); }
+}
+
+/* =====================================================================
+   RÉGLAGES
+===================================================================== */
+async function renderReglages(){
+  const sts = myStations();
+  let h = `<h1 class="pg">Réglages</h1><div class="sub">${esc(S.profile?.full_name||'')} — ${S.isOwner?'Propriétaire':'Gérant'}</div>`;
+  h += `<h2 class="sec">Mon profil</h2><div class="card">
+    <div class="grid2">
+      <div class="fld"><label>Nom complet</label><input id="pf_name" value="${esc(S.profile?.full_name||'')}"></div>
+      <div class="fld"><label>Téléphone</label><input id="pf_phone" value="${esc(S.profile?.phone||'')}"></div>
+    </div>
+    <button class="btn ghost small" onclick="saveProfile()">Enregistrer</button></div>`;
+  if(S.isOwner){
+    const org = S.orgs.find(o=>o.owner_id===S.user.id);
+    h += `<h2 class="sec">Prix à la pompe (FCFA / L)</h2><div class="card" id="rg_prices">`;
+    for(const p of Object.keys(PRODUITS)){
+      const cur = latestPrice(org.id, p);
+      if(cur===null && !['essence','gasoil'].includes(p)) continue;
+      h += `<div class="listrow"><div class="t">${PRODUITS[p]}</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="number" inputmode="numeric" id="px_${p}" value="${cur??''}" placeholder="—" style="width:100px;padding:8px;border:1.5px solid var(--grid);border-radius:8px;background:var(--page);color:var(--ink1);font-size:15px">
+        </div></div>`;
+    }
+    h += `<button class="btn ghost small" onclick="savePrices('${org.id}')">Mettre à jour les prix</button>
+      <div class="hint" style="margin-top:6px;color:var(--ink3);font-size:11px">Chaque changement est historisé : les rapports passés gardent l'ancien prix.</div></div>`;
+    h += `<h2 class="sec">Mes stations</h2>`;
+    sts.forEach(st=>{ h += `<div class="card"><div class="rowline" style="cursor:pointer" onclick="renderStationConfig('${st.id}')">
+      <div><div style="font-weight:700">${esc(st.name)}</div><div style="font-size:12px;color:var(--ink3)">${esc(st.city)} — cuves, pistolets, invitations</div></div>
+      <div style="color:var(--ink3)">›</div></div></div>`; });
+    h += `<div class="card"><b style="font-size:13.5px">Nouvelle station</b>
+      <div class="grid2" style="margin-top:8px">
+        <div class="fld"><label>Nom</label><input id="ns_name" placeholder="Station …"></div>
+        <div class="fld"><label>Ville / quartier</label><input id="ns_city"></div>
+      </div><button class="btn ghost small" onclick="addStation('${org.id}')">+ Ajouter la station</button></div>`;
+  }
+  h += `<div class="card" style="margin-top:20px"><button class="btn danger" onclick="doLogout()">Se déconnecter</button></div>
+    <div class="note">Taji v1.0 — vos données sont sauvegardées en ligne et sécurisées par compte.<br>Chaque action sensible est tracée dans le journal d'audit.</div>`;
+  $('#main').innerHTML = h;
+}
+async function saveProfile(){
+  try{
+    await safe(sb.from('profiles').upsert({id:S.user.id, full_name:$('#pf_name').value.trim(), phone:$('#pf_phone').value.trim()}));
+    S.profile = {...S.profile, full_name:$('#pf_name').value.trim(), phone:$('#pf_phone').value.trim()};
+    toast('✔ Profil enregistré'); renderApp();
+  }catch(e){ err(e); }
+}
+async function savePrices(orgId){
+  try{
+    const rows=[];
+    for(const p of Object.keys(PRODUITS)){
+      const el = document.getElementById('px_'+p); if(!el) continue;
+      const v = parseFloat(el.value);
+      if(v>0 && v!==latestPrice(orgId,p)) rows.push({org_id:orgId, product:p, price_fcfa:v, created_by:S.user.id});
+    }
+    if(!rows.length) return toast('Aucun changement');
+    await safe(sb.from('prices').insert(rows));
+    S.prices = await safe(sb.from('prices').select('*'));
+    toast('✔ Prix mis à jour'); renderReglages();
+  }catch(e){ err(e); }
+}
+async function addStation(orgId){
+  try{
+    const name = $('#ns_name').value.trim(); if(!name) return toast('Nom requis');
+    await safe(sb.from('stations').insert({org_id:orgId, name, city:$('#ns_city').value.trim()}));
+    await loadContext(); toast('✔ Station créée — configure ses cuves et pistolets'); renderReglages();
+  }catch(e){ err(e); }
+}
+async function renderStationConfig(stId){
+  const st = S.stations.find(s=>s.id===stId);
+  delete S.cache['infra_'+stId];
+  $('#main').innerHTML = `<button class="back" onclick="renderReglages()">‹ Réglages</button>
+    <h1 class="pg">${esc(st.name)}</h1><div class="sub">${esc(st.city)}</div><div id="sc_body"><div class="card">Chargement…</div></div>`;
+  try{
+    const infra = await loadInfra(stId);
+    const invites = await safe(sb.from('invites').select('*').eq('station_id',stId).order('created_at',{ascending:false}));
+    const members = await safe(sb.from('station_members').select('*, profiles:user_id(full_name)').eq('station_id',stId));
+    let h = `<h2 class="sec">Cuves</h2><div class="card">`;
+    infra.tanks.forEach(t=>{ h += `<div class="listrow"><div><div class="t">🛢 ${esc(t.name)}</div>
+      <div class="m">${PRODUITS[t.product]} · capacité ${fmt(t.capacity_l)} L</div></div></div>`; });
+    h += `<div class="grid2" style="margin-top:8px">
+      <div class="fld"><label>Produit</label><select id="nt_p"><option value="essence">Essence</option><option value="gasoil">Gasoil</option><option value="petrole">Pétrole</option><option value="melange">Mélange</option></select></div>
+      <div class="fld"><label>Nom</label><input id="nt_n" placeholder="Cuve …"></div>
+      <div class="fld"><label>Capacité (L)</label><input id="nt_c" type="number" inputmode="numeric"></div>
+      <div class="fld"><label>Stock actuel (L)</label><input id="nt_s" type="number" inputmode="numeric"></div>
+    </div><button class="btn ghost small" onclick="cfgAddTank('${stId}')">+ Ajouter une cuve</button></div>`;
+    h += `<h2 class="sec">Pistolets</h2><div class="card">`;
+    infra.nozzles.forEach(n=>{ const t=infra.tanks.find(x=>x.id===n.tank_id);
+      h += `<div class="listrow"><div><div class="t">⛽ ${esc(n.name)}</div><div class="m">${esc(t?.name||'')} · index initial ${fmt(n.initial_index)}</div></div></div>`; });
+    h += infra.tanks.length? `<div class="grid2" style="margin-top:8px">
+      <div class="fld"><label>Cuve</label><select id="nn_t">${infra.tanks.map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join('')}</select></div>
+      <div class="fld"><label>Nom</label><input id="nn_n" placeholder="Pompe 1 · Pistolet A"></div>
+    </div>
+    <div class="fld"><label>Index actuel du compteur</label><input id="nn_i" type="number" inputmode="numeric"></div>
+    <button class="btn ghost small" onclick="cfgAddNozzle('${stId}')">+ Ajouter un pistolet</button>` : '';
+    h += `</div>`;
+    h += `<h2 class="sec">Gérants de cette station</h2><div class="card">`;
+    members.filter(m=>m.active).forEach(m=>{ h += `<div class="listrow"><div class="t">🧑‍🔧 ${esc(m.profiles?.full_name||'—')}</div>
+      <button class="link" style="color:var(--crit)" onclick="revokeMember('${m.id}','${stId}')">révoquer</button></div>`; });
+    if(!members.filter(m=>m.active).length) h += `<p style="font-size:13px;color:var(--ink3)">Aucun gérant rattaché pour l'instant.</p>`;
+    h += `<button class="btn ghost small" style="margin-top:8px" onclick="makeInvite('${st.org_id}','${stId}')">+ Générer un code d'invitation gérant</button>`;
+    const pending = invites.filter(i=>!i.used_by);
+    if(pending.length) h += pending.map(i=>`<div class="codebox">${esc(i.code)}</div>
+      <div style="font-size:12px;color:var(--ink3);text-align:center;margin-top:-4px">À transmettre au gérant — il crée son compte puis saisit ce code.</div>`).join('');
+    h += `</div>`;
+    $('#sc_body').innerHTML = h;
+  }catch(e){ err(e); }
+}
+async function cfgAddTank(stId){
+  try{
+    const cap = +$('#nt_c').value; if(!(cap>0)) return toast('Capacité requise');
+    await safe(sb.from('tanks').insert({station_id:stId, product:$('#nt_p').value, name:$('#nt_n').value.trim()||'Cuve',
+      capacity_l:cap, initial_stock_l:+$('#nt_s').value||0}));
+    toast('✔ Cuve ajoutée'); renderStationConfig(stId);
+  }catch(e){ err(e); }
+}
+async function cfgAddNozzle(stId){
+  try{
+    await safe(sb.from('nozzles').insert({station_id:stId, tank_id:$('#nn_t').value,
+      name:$('#nn_n').value.trim()||'Pistolet', initial_index:+$('#nn_i').value||0}));
+    toast('✔ Pistolet ajouté'); renderStationConfig(stId);
+  }catch(e){ err(e); }
+}
+async function makeInvite(orgId, stId){
+  try{
+    const code = 'TJ' + Math.random().toString(36).slice(2,6).toUpperCase();
+    await safe(sb.from('invites').insert({code, org_id:orgId, station_id:stId, role:'gerant'}));
+    toast('✔ Code généré'); renderStationConfig(stId);
+  }catch(e){ err(e); }
+}
+async function revokeMember(mid, stId){
+  if(!confirm('Révoquer l\'accès de ce gérant ?')) return;
+  try{ await safe(sb.from('station_members').update({active:false}).eq('id',mid)); toast('Accès révoqué'); renderStationConfig(stId); }catch(e){ err(e); }
+}
+
+/* démarrage */
+boot();
+</script>
+</body>
+</html>
