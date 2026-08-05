@@ -4,19 +4,26 @@
 
 ## Fonctionnalités
 
-- **Saisie du jour** (gérant) : index des pompes (ouverture/fermeture), jaugeage des cuves, livraisons (volume facturé vs reçu), encaissements par mode (espèces, Orange Money, Moov Money, crédits clients)
-- **Clôture quotidienne** : calcul automatique des écarts (cuve et caisse), rapport figé et partageable sur WhatsApp, réouverture réservée au propriétaire
-- **Tableau de bord propriétaire** : vue multi-stations, statut conforme / à surveiller / écart important, tendance 14 jours
-- **Crédits clients B2B** : comptes clients, plafonds, encours, remboursements
+- **Saisie du jour** (gérant) : index des pompes (ouverture/fermeture), jaugeage des cuves, livraisons (volume facturé vs reçu), encaissements par mode (espèces, Orange Money, Moov Money, crédits clients), dépenses du jour
+- **Clôture quotidienne** : calcul automatique des écarts (cuve et caisse), rapport figé, partage WhatsApp (partage natif) et export PDF, réouverture réservée au propriétaire
+- **Marge nette quotidienne** : prix d'achat historisé par produit + dépenses → marge brute carburant et marge nette (CA réel − achats − dépenses), au rapport, au dashboard et aux rapports mensuels
+- **Tableau de bord propriétaire** : vue multi-stations, statut conforme / à surveiller / écart important, marge nette agrégée, tendance 14 jours
+- **Application installable & hors-ligne (PWA)** : icône sur l'écran d'accueil, ouverture plein écran, chargement même sans réseau ; les saisies faites hors-ligne sont gardées sur l'appareil et synchronisées automatiquement au retour du réseau
+- **Crédits clients B2B** : comptes clients, plafonds (alerte dépassement), encours, remboursements
 - **Équipe & quarts** : pompistes par pistolet, litres servis par personne
-- **Rapports mensuels** : synthèses par station, exports CSV pour le comptable
+- **Rapports mensuels** : synthèses par station, marge nette, exports CSV pour le comptable
 - **Multi-utilisateurs sécurisé** : propriétaire / gérants par code d'invitation, isolation stricte par organisation (RLS PostgreSQL), journal d'audit
 
 ## Architecture
 
 - **Front-end** : `index.html` — application monofichier (vanilla JS), mobile-first, français, clair/sombre automatique
+- **PWA** : `manifest.webmanifest`, `sw.js` (coquille hors-ligne), `icons/` ; couche hors-ligne côté page (cache des lectures + file d'écritures rejouée) — installable sur Android/iPhone
 - **Back-end** : [Supabase](https://supabase.com) (PostgreSQL + Auth + API REST), schéma dans `supabase/migrations/`
 - **Sécurité** : Row Level Security sur toutes les tables ; les journées clôturées sont verrouillées côté base, pas seulement côté interface
+
+## Positionnement
+
+Face au concurrent **StationPlus** (Maroc/France, connexion Internet obligatoire, MAD/EUR), Taji se différencie sur le terrain ouest-africain : **fonctionne hors-ligne**, **Mobile Money (Orange/Moov)** natif, **FCFA**, et **marge nette quotidienne** (l'argument commercial principal de StationPlus, désormais couvert).
 
 ## Démarrage
 
@@ -28,11 +35,14 @@
 
 ## Feuille de route
 
-- [ ] Mode hors-connexion complet (PWA + file de synchronisation)
-- [ ] Envoi automatique du rapport quotidien via l'API WhatsApp Business
-- [ ] Photos horodatées des index (preuve)
+- [x] Mode hors-connexion complet (PWA + file de synchronisation)
+- [x] Marge nette quotidienne + suivi des dépenses
+- [x] Partage WhatsApp (natif) et export PDF des rapports
+- [ ] Envoi *automatique* du rapport quotidien via l'API WhatsApp Business
+- [ ] Photos horodatées des index (preuve) — nécessite Supabase Storage
 - [ ] Module boutique & lubrifiants
-- [ ] Notifications d'alerte (seuils d'écart, stock bas, plafond crédit)
+- [ ] Import de données au démarrage (clients + soldes, produits + stock)
+- [ ] Notifications d'alerte push (stock bas ; le dépassement de plafond crédit est déjà signalé)
 - [ ] Application pompiste par quart
 
 ## Notes
