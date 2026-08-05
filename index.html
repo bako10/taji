@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#1b5e20">
+<meta name="description" content="Taji — réconciliation quotidienne pompes, cuves et caisse pour stations-service (Mali).">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Taji">
 <title>Taji — Gestion de stations-service</title>
 <style>
   :root{
@@ -134,12 +142,145 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>
 /* =====================================================================
+   TAJI OFFLINE — couche hors-ligne
+   - Lectures (GET) : mises en cache ; servies depuis le cache si le réseau tombe.
+   - Écritures (POST/PATCH/DELETE) sans réseau : mises en file (IndexedDB) et
+     rejouées automatiquement au retour du réseau, avec un jeton d'auth frais.
+   - Les écritures qui exigent un retour serveur (onboarding : .select()) ne sont
+     PAS mises en file (on ne peut pas inventer les identifiants) → erreur claire.
+===================================================================== */
+const TajiOffline = (() => {
+  const origFetch = window.fetch.bind(window);
+  const DB_NAME = 'taji-offline', DB_VER = 1;
+  let dbp = null;
+  function db() {
+    if (dbp) return dbp;
+    dbp = new Promise((res, rej) => {
+      const r = indexedDB.open(DB_NAME, DB_VER);
+      r.onupgradeneeded = () => {
+        const d = r.result;
+        if (!d.objectStoreNames.contains('outbox')) d.createObjectStore('outbox', { keyPath: 'id', autoIncrement: true });
+        if (!d.objectStoreNames.contains('cache'))  d.createObjectStore('cache',  { keyPath: 'url' });
+        if (!d.objectStoreNames.contains('failed')) d.createObjectStore('failed', { keyPath: 'id', autoIncrement: true });
+      };
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => rej(r.error);
+    });
+    return dbp;
+  }
+  async function tx(store, mode, fn) {
+    const d = await db();
+    return new Promise((res, rej) => {
+      const t = d.transaction(store, mode), s = t.objectStore(store);
+      const out = fn(s);
+      t.oncomplete = () => res(out && out.result !== undefined ? out.result : out);
+      t.onerror = () => rej(t.error);
+      t.onabort = () => rej(t.error);
+    });
+  }
+  const cachePut = (url, text) => tx('cache', 'readwrite', s => s.put({ url, text, ts: Date.now() })).catch(()=>{});
+  const cacheGet = (url) => tx('cache', 'readonly', s => s.get(url)).then(r => r ? r.text : null).catch(()=>null);
+  const outboxAdd = (rec) => tx('outbox', 'readwrite', s => s.add(rec));
+  const outboxAll = () => tx('outbox', 'readonly', s => new Promise((res)=>{ const out=[]; s.openCursor().onsuccess=e=>{const c=e.target.result; if(c){out.push(c.value);c.continue();}else res(out);}; }));
+  const outboxDel = (id) => tx('outbox', 'readwrite', s => s.delete(id));
+  const failedAdd = (rec) => tx('failed', 'readwrite', s => s.add(rec)).catch(()=>{});
+  async function pendingCount(){ try { return (await outboxAll()).length; } catch { return 0; } }
+
+  function serializeHeaders(init) {
+    const h = {}; const src = init && init.headers;
+    if (!src) return h;
+    if (typeof src.forEach === 'function' && !Array.isArray(src)) { src.forEach((v, k) => { h[k] = v; }); }
+    else if (Array.isArray(src)) { src.forEach(([k, v]) => { h[k] = v; }); }
+    else { Object.keys(src).forEach(k => { h[k] = src[k]; }); }
+    delete h.Authorization; delete h.authorization; // rejeu avec un jeton frais
+    return h;
+  }
+  const jsonResponse = (text, status) => new Response(text, { status, headers: { 'Content-Type': 'application/json' } });
+
+  async function freshAuthHeaders(base) {
+    const h = { ...base };
+    try { const { data:{ session } } = await sb.auth.getSession(); if (session) h['Authorization'] = 'Bearer ' + session.access_token; } catch {}
+    return h;
+  }
+
+  let replaying = false;
+  async function replay() {
+    if (replaying || !navigator.onLine) return;
+    replaying = true;
+    try {
+      const items = await outboxAll();
+      for (const it of items) {
+        let res;
+        try { res = await origFetch(it.url, { method: it.method, headers: await freshAuthHeaders(it.headers), body: it.body }); }
+        catch { break; } // réseau reperdu → on réessaiera
+        if (res.ok || res.status === 409) { await outboxDel(it.id); }          // succès (ou doublon déjà présent)
+        else if (res.status >= 500) { break; }                                  // erreur serveur → réessai plus tard
+        else { await failedAdd({ ...it, failStatus: res.status, failAt: Date.now() }); await outboxDel(it.id); } // 4xx définitif
+      }
+    } catch {} finally { replaying = false; updateBanner(); }
+  }
+
+  async function tajiFetch(input, init) {
+    const url = typeof input === 'string' ? input : input.url;
+    const method = ((init && init.method) || (typeof input !== 'string' && input.method) || 'GET').toUpperCase();
+    const isRest = url.includes('/rest/v1/');
+    try {
+      const res = await origFetch(input, init);
+      if (isRest && method === 'GET' && res.ok) { res.clone().text().then(t => cachePut(url, t)); }
+      if (navigator.onLine) replay();
+      return res;
+    } catch (netErr) {
+      if (!isRest) throw netErr; // auth & autres : laisser remonter
+      if (method === 'GET') {
+        const cached = await cacheGet(url);
+        return jsonResponse(cached != null ? cached : '[]', 200); // sinon liste vide → l'app s'affiche
+      }
+      // Mutation hors-ligne
+      const prefer = ((init && init.headers && (init.headers.Prefer || init.headers.prefer)) || '');
+      const wantsRepresentation = /return=representation/.test(prefer) || /[?&]select=/.test(url);
+      if (wantsRepresentation) throw netErr; // besoin des ids serveur (onboarding) → erreur claire
+      await outboxAdd({ url, method, headers: serializeHeaders(init), body: (init && init.body) || null, ts: Date.now() });
+      updateBanner();
+      toast('📴 Hors-ligne — saisie gardée sur l\'appareil');
+      return jsonResponse('[]', method === 'DELETE' ? 204 : 201); // succès optimiste (PostgREST renvoie [] sans representation)
+    }
+  }
+
+  async function updateBanner() {
+    let bar = document.getElementById('offbar');
+    const n = await pendingCount();
+    const offline = !navigator.onLine;
+    if (!offline && n === 0) { if (bar) bar.remove(); return; }
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.id = 'offbar';
+      bar.style.cssText = 'position:sticky;top:0;z-index:100;padding:6px 12px;font-size:12.5px;font-weight:600;text-align:center;color:#fff';
+      const app = document.querySelector('.app') || document.body;
+      app.insertBefore(bar, app.firstChild);
+    }
+    if (offline) { bar.style.background = '#b26a00'; bar.textContent = `📴 Hors-ligne — saisies gardées sur l'appareil${n ? ` · ${n} en attente` : ''}`; }
+    else { bar.style.background = '#1b5e20'; bar.textContent = `⟳ Synchronisation… ${n} saisie(s) en attente`; }
+  }
+
+  function init() {
+    window.addEventListener('online',  () => { toast('🌐 De retour en ligne — synchronisation…'); updateBanner(); replay(); });
+    window.addEventListener('offline', () => { toast('📴 Hors-ligne'); updateBanner(); });
+    setInterval(() => { if (navigator.onLine) replay(); }, 30000); // filet de sécurité
+    updateBanner();
+    if (navigator.onLine) replay();
+  }
+
+  return { fetch: tajiFetch, replay, pendingCount, updateBanner, init };
+})();
+
+/* =====================================================================
    TAJI — application de gestion de stations-service (Mali)
    Front-end vanilla JS + Supabase
 ===================================================================== */
 const SUPABASE_URL = 'https://ayvmfcttcondxvfpdiok.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_WEoGK95LS8IXeNoZyV9Sng_Vnjukyd-';
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { global: { fetch: TajiOffline.fetch } });
+window.sb = sb;
 
 /* ---------- helpers ---------- */
 const $ = s => document.querySelector(s);
@@ -1202,6 +1343,10 @@ async function revokeMember(mid, stId){
 }
 
 /* démarrage */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(e => console.warn('SW non enregistré', e)); });
+}
+try { TajiOffline.init(); } catch (e) { console.warn('Offline init', e); }
 boot();
 </script>
 </body>
