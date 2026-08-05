@@ -654,6 +654,8 @@ async function computeDay(st, day, dayData, infra){
           readingsOk, dipsOk, cashOk, complet: readingsOk && dipsOk};
 }
 function statutOf(c){
+  // Prix de vente non configuré : CA et écart de caisse non fiables → ne pas afficher "conforme"
+  if(c.ventesL>0 && !(c.caTheo>0)) return 'warn';
   const pc = c.caTheo ? Math.abs(c.ecartCaisse)/c.caTheo : 0;
   const pv = c.ventesL ? Math.abs(c.ecartCuve)/c.ventesL : 0;
   if(pc<=0.005 && pv<=0.005) return 'ok';
@@ -1016,6 +1018,8 @@ async function doCloture(stId){
     const dayData = await loadDay(stId, S.day);
     const c = await computeDay(st, S.day, dayData, infra);
     if(!c.complet){ toast('⚠ Il manque des relevés (index de fermeture ou jauges).'); $('#btn_close').disabled=false; return; }
+    const sansPrix = c.lignes.filter(l=> l.ventes>0 && !(l.prix>0));
+    if(sansPrix.length && !confirm(`Aucun prix de vente pour : ${sansPrix.map(l=>l.produit).join(', ')}.\nLe CA théorique et l'écart de caisse seront faussés (0). Renseigne le prix dans Réglages, ou clôture quand même ?`)){ $('#btn_close').disabled=false; return; }
     if(!c.cashOk && !confirm('Aucun encaissement saisi. Clôturer quand même ?')){ $('#btn_close').disabled=false; return; }
     const summary = {ventesL:c.ventesL, caTheo:c.caTheo, enc:c.enc, encParMode:c.encParMode,
       ecartCaisse:c.ecartCaisse, ecartCuve:c.ecartCuve, statut:statutOf(c),
