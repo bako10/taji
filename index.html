@@ -126,6 +126,14 @@
   .datepick input{padding:9px 10px;font-size:14px;border:1.5px solid var(--grid);border-radius:10px;background:var(--surface);color:var(--ink1);font-family:inherit}
   .codebox{font-size:26px;font-weight:800;letter-spacing:4px;text-align:center;background:var(--brand-soft);border-radius:12px;padding:14px;margin:10px 0;color:var(--brand)}
   .note{font-size:11.5px;color:var(--ink3);text-align:center;padding:14px 24px 4px;line-height:1.5}
+  @media print{
+    .topbar,.tabbar,#offbar,.datepick,.back,.btn{display:none!important}
+    .app{max-width:none;padding:0}
+    main{padding:0}
+    .card{box-shadow:none;border:1px solid #ccc;break-inside:avoid}
+    :root{color-scheme:light}
+    *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  }
 </style>
 </head>
 <body>
@@ -632,7 +640,14 @@ function statutOf(c){
 }
 function waReport(st, day, sum){
   const lab = {ok:'✅ CONFORME', warn:'⚠️ À SURVEILLER', crit:'🔴 ÉCART IMPORTANT'}[sum.statut] || '';
-  return `⛽ *TAJI — Rapport du ${frDateShort(day)}*\n📍 ${st.name}\nStatut : *${lab}*\n\n💧 Litres vendus : *${fmt(sum.ventesL)} L*\n🛢 Écart cuves : *${fmtS(sum.ecartCuve)} L*\n💰 CA théorique : ${fmt(sum.caTheo)} F\n💵 Encaissé : ${fmt(sum.enc)} F\n📊 Écart de caisse : *${fmtS(sum.ecartCaisse)} F*\n\n_Généré par Taji_`;
+  const ligneMarge = (sum.margeNette!=null) ? `\n📈 Marge nette : *${fmt(sum.margeNette)} F*` : '';
+  return `⛽ *TAJI — Rapport du ${frDateShort(day)}*\n📍 ${st.name}\nStatut : *${lab}*\n\n💧 Litres vendus : *${fmt(sum.ventesL)} L*\n🛢 Écart cuves : *${fmtS(sum.ecartCuve)} L*\n💰 CA théorique : ${fmt(sum.caTheo)} F\n💵 Encaissé : ${fmt(sum.enc)} F\n📊 Écart de caisse : *${fmtS(sum.ecartCaisse)} F*${ligneMarge}\n\n_Généré par Taji_`;
+}
+/* Partage natif (WhatsApp, etc.) avec repli wa.me — idéal en PWA mobile */
+async function shareReport(btn){
+  const text = decodeURIComponent(btn.dataset.text||'');
+  if(navigator.share){ try{ await navigator.share({text}); return; }catch(e){ if(e && e.name==='AbortError') return; } }
+  window.open('https://wa.me/?text='+encodeURIComponent(text), '_blank', 'noopener');
 }
 
 /* =====================================================================
@@ -760,8 +775,10 @@ function reportCard(st, day, sum, withActions){
       <tr><td><b>Écart de caisse</b></td><td class="${sum.ecartCaisse<0?'neg':'pos'}"><b>${fmtS(sum.ecartCaisse)} F</b></td></tr>
     </table>
     ${withActions?`
-    <a class="btn ghost" style="text-decoration:none;text-align:center" target="_blank" rel="noopener"
-       href="https://wa.me/?text=${encodeURIComponent(waReport(st, day, {...sum, statut}))}">📤 Partager sur WhatsApp</a>
+    <div class="grid2" style="margin-top:4px">
+      <button class="btn ghost" onclick="shareReport(this)" data-text="${encodeURIComponent(waReport(st, day, {...sum, statut}))}">📤 WhatsApp</button>
+      <button class="btn ghost" onclick="window.print()">🖨 PDF</button>
+    </div>
     ${S.isOwner?`<button class="btn danger" onclick="reopenDay('${st.id}','${day}')">↺ Rouvrir cette journée (correction)</button>`:''}`:''}
   </div>`;
 }
