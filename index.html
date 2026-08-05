@@ -447,7 +447,7 @@ async function doJoin(){
 /* =====================================================================
    ONBOARDING PROPRIÉTAIRE — org, station, cuves, pistolets, prix
 ===================================================================== */
-const OB = { org:'', st:{name:'',city:''}, tanks:[], nozzles:[], prices:{essence:'',gasoil:''} };
+const OB = { org:'', st:{name:'',city:''}, tanks:[], nozzles:[], prices:{essence:'',gasoil:''}, buyPrices:{} };
 function renderOnboarding(step=1){
   const steps = {
     1: `<p style="font-size:14px;margin-bottom:10px"><b>Étape 1/4 — Ton entreprise</b></p>
@@ -482,9 +482,16 @@ function renderOnboarding(step=1){
           <button class="btn ghost small" onclick="obAddNozzle()">+ Ajouter le pistolet</button>
         </div>`:''}
         <button class="btn" onclick="if(!OB.tanks.length||!OB.nozzles.length) return toast('Ajoute au moins une cuve et un pistolet'); renderOnboarding(4)">Continuer</button>`,
-    4: `<p style="font-size:14px;margin-bottom:10px"><b>Étape 4/4 — Prix à la pompe (FCFA / litre)</b></p>
+    4: `<p style="font-size:14px;margin-bottom:10px"><b>Étape 4/4 — Prix vente / achat (FCFA / litre)</b></p>
         ${[...new Set(OB.tanks.map(t=>t.product))].map(p=>`
-          <div class="fld"><label>${PRODUITS[p]}</label><input id="ob_px_${p}" type="number" inputmode="numeric" value="${OB.prices[p]||''}" placeholder="850"></div>`).join('')}
+          <div class="listrow"><div class="t">${PRODUITS[p]}</div>
+            <div style="display:flex;gap:8px;align-items:flex-end">
+              <div style="text-align:center"><div style="font-size:9.5px;color:var(--ink3);font-weight:700;margin-bottom:2px">VENTE</div>
+                <input id="ob_px_${p}" type="number" inputmode="numeric" value="${OB.prices[p]||''}" placeholder="775" style="width:78px;padding:8px;border:1.5px solid var(--grid);border-radius:8px;background:var(--page);color:var(--ink1);font-size:15px"></div>
+              <div style="text-align:center"><div style="font-size:9.5px;color:var(--ink3);font-weight:700;margin-bottom:2px">ACHAT</div>
+                <input id="ob_buy_${p}" type="number" inputmode="numeric" value="${OB.buyPrices[p]||''}" placeholder="700" style="width:78px;padding:8px;border:1.5px solid var(--grid);border-radius:8px;background:var(--page);color:var(--ink1);font-size:15px"></div>
+            </div></div>`).join('')}
+        <div class="hint" style="color:var(--ink3);font-size:11px;margin:2px 0 8px">Le prix d'achat (optionnel) active le calcul de la marge nette.</div>
         <button class="btn" onclick="obFinish()">🚀 Créer ma station</button>`
   };
   authShell(steps[step] + `<div class="switch-auth"><button class="link" onclick="${step>1?`renderOnboarding(${step-1})`:'renderChooseRole()'}">‹ Retour</button></div>`);
@@ -508,7 +515,8 @@ async function obFinish(){
     const priceRows = [];
     [...new Set(OB.tanks.map(t=>t.product))].forEach(p=>{
       const v = +document.getElementById('ob_px_'+p)?.value || +OB.prices[p];
-      if(v>0) priceRows.push({org_id:org.id, product:p, price_fcfa:v, created_by:S.user.id});
+      const b = +document.getElementById('ob_buy_'+p)?.value || 0;
+      if(v>0) priceRows.push({org_id:org.id, product:p, price_fcfa:v, buy_price_fcfa: b>0? b : null, created_by:S.user.id});
     });
     if(priceRows.length) await safe(sb.from('prices').insert(priceRows));
     await loadContext(); S.tab='accueil'; renderApp();
