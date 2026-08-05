@@ -316,7 +316,7 @@ async function safe(promise){ const {data,error} = await promise; if(error) thro
 const S = {
   session:null, user:null, profile:null,
   orgs:[], stations:[], memberships:[], prices:[],
-  isOwner:false, isGerant:false,
+  isOwner:false, isGerant:false, isPompiste:false,
   tab:'accueil', day: todayISO(), gerStation:null,
   cache:{}
 };
@@ -350,7 +350,8 @@ async function loadContext(){
   S.profile = profile; S.orgs = orgs; S.stations = stations;
   S.memberships = memberships; S.prices = prices;
   S.isOwner = orgs.some(o=>o.owner_id===uid);
-  S.isGerant = memberships.length>0;
+  S.isGerant = memberships.some(m=>m.role==='gerant');
+  S.isPompiste = !S.isGerant && memberships.some(m=>m.role==='pompiste');
 }
 
 /* ---------- démarrage ---------- */
@@ -361,7 +362,7 @@ async function boot(){
     if(!S.user){ renderAuth(); }
     else{
       await loadContext();
-      if(!S.isOwner && !S.isGerant) renderChooseRole();
+      if(!S.isOwner && !S.isGerant && !S.isPompiste) renderChooseRole();
       else renderApp();
     }
   }catch(e){ err(e); renderAuth(); }
@@ -424,7 +425,7 @@ function renderChooseRole(){
   authShell(`
     <p style="font-size:14px;margin-bottom:12px"><b>Bienvenue ${esc(S.profile?.full_name||'')} !</b><br>Comment veux-tu utiliser Taji ?</p>
     <button class="btn" onclick="renderOnboarding()">👔 Je suis propriétaire — créer mes stations</button>
-    <button class="btn ghost" onclick="renderJoin()">🧑‍🔧 Je suis gérant — j'ai un code d'invitation</button>
+    <button class="btn ghost" onclick="renderJoin()">🧑‍🔧 J'ai un code d'invitation (gérant ou pompiste)</button>
     <div class="switch-auth"><button class="link" onclick="doLogout()">Se déconnecter</button></div>`);
 }
 function renderJoin(){
@@ -529,10 +530,13 @@ async function obFinish(){
 ===================================================================== */
 function renderApp(){
   $('#topbar').classList.remove('hidden'); $('#tabbar').classList.remove('hidden');
-  $('#topmeta').innerHTML = `${esc(S.profile?.full_name||'')}<br><span style="color:var(--brand);font-weight:700">${S.isOwner?'Propriétaire':'Gérant'}</span>`;
+  const roleLabel = S.isOwner?'Propriétaire':S.isGerant?'Gérant':'Pompiste';
+  $('#topmeta').innerHTML = `${esc(S.profile?.full_name||'')}<br><span style="color:var(--brand);font-weight:700">${roleLabel}</span>`;
   const tabs = S.isOwner
     ? [['accueil','🏠','Accueil'],['saisie','📝','Saisie'],['credits','📒','Crédits'],['rapports','📊','Rapports'],['reglages','⚙️','Réglages']]
-    : [['saisie','📝','Saisie'],['historique','🗓','Historique'],['credits','📒','Crédits'],['equipe','👥','Équipe'],['reglages','⚙️','Réglages']];
+    : S.isGerant
+    ? [['saisie','📝','Saisie'],['historique','🗓','Historique'],['credits','📒','Crédits'],['equipe','👥','Équipe'],['reglages','⚙️','Réglages']]
+    : [['saisie','📝','Saisie'],['historique','🗓','Historique'],['reglages','⚙️','Réglages']];
   $('#tabs').innerHTML = tabs.map(([id,ic,lb])=>`<button class="${S.tab===id?'active':''}" onclick="goTab('${id}')"><span class="ic">${ic}</span>${lb}</button>`).join('');
   const views = {accueil:renderAccueil, saisie:renderSaisie, credits:renderCredits, rapports:renderRapports, reglages:renderReglages, historique:renderHistorique, equipe:renderEquipe};
   (views[S.tab] || (S.isOwner?renderAccueil:renderSaisie))();
@@ -931,7 +935,9 @@ async function renderSaisie(){
       <div class="hint" style="margin-top:6px;color:var(--ink3);font-size:11px">La marge nette (CA − achats − dépenses) apparaît au rapport si le prix d'achat est renseigné dans Réglages.</div>
       </div></div>
 
-    <button class="btn" id="btn_close" ${done1&&done2?'':'disabled'} onclick="doCloture('${st.id}')">✅ Clôturer la journée</button>
+    ${!S.isPompiste
+      ? `<button class="btn" id="btn_close" ${done1&&done2?'':'disabled'} onclick="doCloture('${st.id}')">✅ Clôturer la journée</button>`
+      : `<div class="note" style="background:var(--brand-soft);border-radius:12px;padding:12px;color:var(--brand);font-weight:600;text-align:center">Saisie enregistrée. La clôture est faite par le gérant ou le propriétaire.</div>`}
     <div id="preview"></div>
     <div class="note">Les relevés restent modifiables jusqu'à la clôture. Après clôture, seul le propriétaire peut rouvrir la journée.</div>`;
     $('#sg_body').innerHTML = h;
@@ -1397,14 +1403,16 @@ async function renderStationConfig(stId){
     <div class="fld"><label>Index actuel du compteur</label><input id="nn_i" type="number" inputmode="numeric"></div>
     <button class="btn ghost small" onclick="cfgAddNozzle('${stId}')">+ Ajouter un pistolet</button>` : '';
     h += `</div>`;
-    h += `<h2 class="sec">Gérants de cette station</h2><div class="card">`;
-    members.filter(m=>m.active).forEach(m=>{ h += `<div class="listrow"><div class="t">🧑‍🔧 ${esc(m.profiles?.full_name||'—')}</div>
+    h += `<h2 class="sec">Équipe de cette station (gérants & pompistes)</h2><div class="card">`;
+    members.filter(m=>m.active).forEach(m=>{ h += `<div class="listrow"><div class="t">${m.role==='pompiste'?'⛽':'🧑‍🔧'} ${esc(m.profiles?.full_name||'—')} <span style="font-size:10.5px;color:var(--ink3);font-weight:600">(${m.role==='pompiste'?'pompiste':'gérant'})</span></div>
       <button class="link" style="color:var(--crit)" onclick="revokeMember('${m.id}','${stId}')">révoquer</button></div>`; });
-    if(!members.filter(m=>m.active).length) h += `<p style="font-size:13px;color:var(--ink3)">Aucun gérant rattaché pour l'instant.</p>`;
-    h += `<button class="btn ghost small" style="margin-top:8px" onclick="makeInvite('${st.org_id}','${stId}')">+ Générer un code d'invitation gérant</button>`;
+    if(!members.filter(m=>m.active).length) h += `<p style="font-size:13px;color:var(--ink3)">Aucun membre rattaché pour l'instant.</p>`;
+    h += `<div class="grid2" style="margin-top:8px">
+      <button class="btn ghost small" onclick="makeInvite('${st.org_id}','${stId}','gerant')">+ Code gérant</button>
+      <button class="btn ghost small" onclick="makeInvite('${st.org_id}','${stId}','pompiste')">+ Code pompiste</button></div>`;
     const pending = invites.filter(i=>!i.used_by);
     if(pending.length) h += pending.map(i=>`<div class="codebox">${esc(i.code)}</div>
-      <div style="font-size:12px;color:var(--ink3);text-align:center;margin-top:-4px">À transmettre au gérant — il crée son compte puis saisit ce code.</div>`).join('');
+      <div style="font-size:12px;color:var(--ink3);text-align:center;margin-top:-4px">Code <b>${i.role==='pompiste'?'pompiste':'gérant'}</b> — à transmettre : la personne crée son compte puis saisit ce code.</div>`).join('');
     h += `</div>`;
     $('#sc_body').innerHTML = h;
   }catch(e){ err(e); }
@@ -1424,11 +1432,12 @@ async function cfgAddNozzle(stId){
     toast('✔ Pistolet ajouté'); renderStationConfig(stId);
   }catch(e){ err(e); }
 }
-async function makeInvite(orgId, stId){
+async function makeInvite(orgId, stId, role){
   try{
+    role = role==='pompiste' ? 'pompiste' : 'gerant';
     const code = 'TJ' + Math.random().toString(36).slice(2,6).toUpperCase();
-    await safe(sb.from('invites').insert({code, org_id:orgId, station_id:stId, role:'gerant'}));
-    toast('✔ Code généré'); renderStationConfig(stId);
+    await safe(sb.from('invites').insert({code, org_id:orgId, station_id:stId, role}));
+    toast('✔ Code '+role+' généré'); renderStationConfig(stId);
   }catch(e){ err(e); }
 }
 async function revokeMember(mid, stId){
