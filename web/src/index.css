@@ -1,0 +1,53 @@
+@import 'tailwindcss';
+
+/* ============================================================
+   Taji v2 — tokens de marque (portés de la PWA v1)
+   Mobile-first, français, clair/sombre.
+============================================================ */
+@theme {
+  --color-brand: #1b5e20;
+  --color-brand2: #2e7d32;
+  --color-brand-soft: #e8f5e9;
+  --color-good: #0ca30c;
+  --color-good-text: #006300;
+  --color-warn: #fab219;
+  --color-crit: #d03b3b;
+
+  --color-surface: #fcfcfb;
+  --color-page: #f9f9f7;
+  --color-ink1: #0b0b0b;
+  --color-ink2: #52514e;
+  --color-ink3: #898781;
+  --color-grid: #e1e0d9;
+
+  --font-sans: system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+/* Thème sombre : appliqué via la classe .dark sur <html> */
+.dark {
+  --color-brand: #66bb6a;
+  --color-brand2: #81c784;
+  --color-brand-soft: #12351a;
+  --color-good-text: #0ca30c;
+
+  --color-surface: #1a1a19;
+  --color-page: #0d0d0d;
+  --color-ink1: #ffffff;
+  --color-ink2: #c3c2b7;
+  --color-ink3: #898781;
+  --color-grid: #2c2c2a;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background: var(--color-page);
+  color: var(--color-ink1);
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+/* Nombres en format fr-FR, sans décimales pour les FCFA : géré côté JS (Intl). */
