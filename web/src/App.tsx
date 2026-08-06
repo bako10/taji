@@ -8,6 +8,7 @@ import { JoinInvite } from './pages/JoinInvite'
 import { Onboarding } from './pages/Onboarding'
 import { Home } from './pages/Home'
 import { Reglages } from './pages/Reglages'
+import { Saisie } from './pages/Saisie'
 import { Placeholder } from './pages/Placeholder'
 
 function Loader() {
@@ -57,7 +58,7 @@ export default function App() {
     <Routes>
       <Route element={<Layout />}>
         <Route path="/" element={isOwner ? <Home /> : <Navigate to="/saisie" replace />} />
-        <Route path="/saisie" element={<Placeholder title="Saisie du jour" phase="PHASE 2" />} />
+        <Route path="/saisie" element={<Saisie />} />
         <Route path="/historique" element={<Placeholder title="Historique" phase="PHASE 3" />} />
         <Route path="/credits" element={<Placeholder title="Crédits clients" phase="PHASE 3" />} />
         <Route path="/rapports" element={<Placeholder title="Rapports" phase="PHASE 3" />} />
