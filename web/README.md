@@ -1,32 +1,36 @@
-# React + TypeScript + Vite
+# Taji v2 — application React (refonte)
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Refonte de la PWA `index.html` (racine du dépôt) en **React + TypeScript + Vite + Tailwind**.
+La PWA v1 reste en ligne (GitHub Pages) jusqu'à la bascule. Même base Supabase (projet `taji`).
 
-Currently, two official plugins are available:
+## Développement local
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+cd web
+cp .env.example .env      # renseigne VITE_SUPABASE_URL et VITE_SUPABASE_ANON_KEY (clé publishable)
+npm install
+npm run dev               # http://localhost:5173
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Autres commandes : `npm run build` (typecheck + build), `npm run preview`, `npm test`
+(test numérique de la réconciliation), `npm run lint`.
+
+## Déploiement Vercel
+
+1. Sur vercel.com → **Add New Project** → importer le dépôt GitHub `bako10/taji`.
+2. **Root Directory** : `web` (important — l'app n'est pas à la racine).
+3. Framework détecté : **Vite**. Build `npm run build`, output `dist` (auto).
+4. **Environment Variables** (Settings → Environment Variables) :
+   - `VITE_SUPABASE_URL` = `https://ayvmfcttcondxvfpdiok.supabase.co`
+   - `VITE_SUPABASE_ANON_KEY` = clé *publishable* (voir `.env.example`)
+5. Déployer. `vercel.json` gère déjà le routage SPA (deep links).
+
+Le fichier `.env` réel n'est jamais committé (ignoré). La clé publishable est publique par
+conception — la sécurité repose sur les policies RLS de la base.
+
+## Structure
+
+- `src/lib/` — client Supabase, types générés, format fr-FR, prix, **reconcile** (calcul pur testé)
+- `src/context/Session.tsx` — auth + contexte (profil, orgs, stations, membres, prix) + rôles
+- `src/pages/` — auth, onboarding, saisie, historique, crédits, équipe, rapports, réglages
+- `src/components/` — coquille, UI, carte de rapport
