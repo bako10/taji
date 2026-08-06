@@ -9,7 +9,10 @@ import { Onboarding } from './pages/Onboarding'
 import { Home } from './pages/Home'
 import { Reglages } from './pages/Reglages'
 import { Saisie } from './pages/Saisie'
-import { Placeholder } from './pages/Placeholder'
+import { Historique } from './pages/Historique'
+import { Credits } from './pages/Credits'
+import { Equipe } from './pages/Equipe'
+import { Rapports } from './pages/Rapports'
 
 function Loader() {
   return (
@@ -59,10 +62,10 @@ export default function App() {
       <Route element={<Layout />}>
         <Route path="/" element={isOwner ? <Home /> : <Navigate to="/saisie" replace />} />
         <Route path="/saisie" element={<Saisie />} />
-        <Route path="/historique" element={<Placeholder title="Historique" phase="PHASE 3" />} />
-        <Route path="/credits" element={<Placeholder title="Crédits clients" phase="PHASE 3" />} />
-        <Route path="/rapports" element={<Placeholder title="Rapports" phase="PHASE 3" />} />
-        <Route path="/equipe" element={<Placeholder title="Équipe" phase="PHASE 3" />} />
+        <Route path="/historique" element={<Historique />} />
+        <Route path="/credits" element={<Credits />} />
+        <Route path="/rapports" element={<Rapports />} />
+        <Route path="/equipe" element={<Equipe />} />
         <Route path="/reglages" element={<Reglages />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

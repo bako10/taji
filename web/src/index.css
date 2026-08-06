@@ -51,3 +51,18 @@ body {
 }
 
 /* Nombres en format fr-FR, sans décimales pour les FCFA : géré côté JS (Intl). */
+
+/* Impression PDF (bouton du rapport) : ne garder que le contenu. */
+@media print {
+  header,
+  nav {
+    display: none !important;
+  }
+  main {
+    padding: 0 !important;
+  }
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

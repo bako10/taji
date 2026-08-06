@@ -7,11 +7,12 @@
     <meta name="description" content="Taji — réconciliation quotidienne pompes, cuves et caisse pour stations-service (Mali)." />
     <title>Taji — Gestion de stations-service</title>
     <script>
-      // Thème sombre auto (préférence système), sans flash au chargement.
+      // Thème : préférence enregistrée sinon système, sans flash au chargement.
       try {
-        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-          document.documentElement.classList.add('dark');
-        }
+        var pref = localStorage.getItem('taji-theme');
+        var sysDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var dark = pref === 'dark' || ((pref === 'system' || !pref) && sysDark);
+        if (dark) document.documentElement.classList.add('dark');
       } catch (e) {}
     </script>
   </head>
