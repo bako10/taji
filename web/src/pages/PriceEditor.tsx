@@ -110,11 +110,11 @@ export function PriceEditor({
       await supabase.from('audit_log').insert(
         changes.map((c) => ({
           station_id: null,
+          org_id: org.id,
           action: 'changement_prix',
           entity: 'prices',
           entity_id: c.product,
           detail: {
-            org_id: org.id,
             produit: PRODUITS[c.product],
             ancien_vente: c.oldSale,
             nouveau_vente: c.newSale,

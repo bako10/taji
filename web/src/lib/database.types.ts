@@ -20,6 +20,7 @@ export type Database = {
           entity: string
           entity_id: string | null
           id: number
+          org_id: string | null
           station_id: string | null
           user_id: string | null
         }
@@ -30,6 +31,7 @@ export type Database = {
           entity: string
           entity_id?: string | null
           id?: never
+          org_id?: string | null
           station_id?: string | null
           user_id?: string | null
         }

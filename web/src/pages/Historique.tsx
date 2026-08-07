@@ -63,6 +63,7 @@ export function Historique() {
       if (error) throw error
       await supabase.from('audit_log').insert({
         station_id: stationId,
+        org_id: st?.org_id,
         action: 'reouverture',
         entity: 'day_closures',
         entity_id: c.day,

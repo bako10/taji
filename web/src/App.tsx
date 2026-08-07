@@ -13,6 +13,7 @@ import { Historique } from './pages/Historique'
 import { Credits } from './pages/Credits'
 import { Equipe } from './pages/Equipe'
 import { Rapports } from './pages/Rapports'
+import { Journal } from './pages/Journal'
 
 function Loader() {
   return (
@@ -65,6 +66,7 @@ export default function App() {
         <Route path="/historique" element={<Historique />} />
         <Route path="/credits" element={<Credits />} />
         <Route path="/rapports" element={<Rapports />} />
+        <Route path="/journal" element={isOwner ? <Journal /> : <Navigate to="/" replace />} />
         <Route path="/equipe" element={<Equipe />} />
         <Route path="/reglages" element={<Reglages />} />
         <Route path="*" element={<Navigate to="/" replace />} />

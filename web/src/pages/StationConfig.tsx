@@ -58,12 +58,15 @@ export function StationConfig({ station, onBack, onChanged }: { station: Station
     const code = 'TJ' + Math.random().toString(36).slice(2, 6).toUpperCase()
     const { error } = await supabase.from('invites').insert({ code, org_id: station.org_id, station_id: station.id, role })
     if (error) return toast('⚠ ' + error.message)
+    await supabase.from('audit_log').insert({ station_id: station.id, org_id: station.org_id, action: 'invitation', entity: 'invites', entity_id: code, detail: { role, station: station.name } })
     toast('✔ Code ' + role + ' généré'); await load()
   }
   async function revoke(id: string) {
     if (!confirm('Révoquer l’accès de ce membre ?')) return
+    const m = members.find((x) => x.id === id)
     const { error } = await supabase.from('station_members').update({ active: false }).eq('id', id)
     if (error) return toast('⚠ ' + error.message)
+    await supabase.from('audit_log').insert({ station_id: station.id, org_id: station.org_id, action: 'revocation', entity: 'station_members', entity_id: id, detail: { role: m?.role, nom: m?.profiles?.full_name, station: station.name } })
     toast('Accès révoqué'); await load()
   }
   async function togglePhoto(v: boolean) {

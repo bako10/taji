@@ -204,8 +204,21 @@ export function Saisie() {
   async function del(table: 'deliveries' | 'cash_entries' | 'expenses', id: string) {
     setBusy(true)
     try {
+      // Détail lisible pour le journal d'activité (avant suppression)
+      let detail: Record<string, unknown> = { table }
+      if (table === 'deliveries') {
+        const d = data!.deliveries.find((x) => x.id === id)
+        detail = { type: 'livraison', fournisseur: d?.supplier, volume_facture_l: d?.volume_invoiced_l }
+      } else if (table === 'cash_entries') {
+        const c = data!.cash.find((x) => x.id === id)
+        detail = { type: 'encaissement', mode: c?.method, montant_fcfa: c?.amount_fcfa }
+      } else {
+        const e = data!.expenses.find((x) => x.id === id)
+        detail = { type: 'depense', categorie: e?.category, montant_fcfa: e?.amount_fcfa }
+      }
       const { error } = await supabase.from(table).delete().eq('id', id)
       if (error) throw error
+      await supabase.from('audit_log').insert({ station_id: stationId, org_id: st!.org_id, action: 'suppression_saisie', entity: table, entity_id: id, detail: { ...detail, jour: day } })
       await load()
     } catch (e) { toast('⚠ ' + (e as Error).message) } finally { setBusy(false) }
   }
@@ -226,7 +239,7 @@ export function Saisie() {
         const { error } = await supabase.from('day_closures').insert({ station_id: stationId, day, closed_by: user!.id, summary: c as never })
         if (error) throw error
       }
-      await supabase.from('audit_log').insert({ station_id: stationId, action: 'cloture', entity: 'day_closures', entity_id: day, detail: { ecartCaisse: c.ecartCaisse, ecartCuve: c.ecartCuve } })
+      await supabase.from('audit_log').insert({ station_id: stationId, org_id: st!.org_id, action: 'cloture', entity: 'day_closures', entity_id: day, detail: { ecartCaisse: c.ecartCaisse, ecartCuve: c.ecartCuve } })
       toast('✅ Journée clôturée')
       await load()
     } catch (e) { toast('⚠ ' + (e as Error).message) } finally { setBusy(false) }

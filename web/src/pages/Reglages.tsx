@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useSession } from '../context/Session'
 import { supabase } from '../lib/supabase'
 import { Button, Card, Field, Input } from '../components/ui'
@@ -64,6 +65,19 @@ export function Reglages() {
 
       {isOwner && org && (
         <>
+          <h2 className="text-[13px] font-bold text-ink3 mb-2 uppercase">Activité</h2>
+          <Link to="/journal">
+            <Card className="mb-4 cursor-pointer">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="font-bold">📋 Journal d'activité</div>
+                  <div className="text-[12px] text-ink3">Clôtures, réouvertures, prix, suppressions, accès…</div>
+                </div>
+                <span className="text-ink3">›</span>
+              </div>
+            </Card>
+          </Link>
+
           <h2 className="text-[13px] font-bold text-ink3 mb-2 uppercase">Prix vente / achat (FCFA / L)</h2>
           <PriceEditor org={org} prices={prices} userId={user!.id} onSaved={refresh} />
 
