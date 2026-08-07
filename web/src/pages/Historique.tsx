@@ -22,6 +22,10 @@ export function Historique() {
   const [closures, setClosures] = useState<Closure[]>([])
   const [sel, setSel] = useState<Closure | null>(null)
   const [loading, setLoading] = useState(true)
+  const [reopenOpen, setReopenOpen] = useState(false)
+  const [motif, setMotif] = useState('')
+  const [confirmChk, setConfirmChk] = useState(false)
+  const [busy, setBusy] = useState(false)
 
   const st = stations.find((s) => s.id === stationId)
 
@@ -42,14 +46,36 @@ export function Historique() {
     void load()
   }, [load])
 
-  async function reopen(c: Closure) {
-    if (!confirm('Rouvrir cette journée ? Le gérant pourra modifier les relevés, puis re-clôturer.')) return
-    const { error } = await supabase.from('day_closures').update({ status: 'reopened' }).eq('id', c.id)
-    if (error) return toast('⚠ ' + error.message)
-    await supabase.from('audit_log').insert({ station_id: stationId, action: 'reouverture', entity: 'day_closures', entity_id: c.day, detail: { by: user?.id } })
-    toast('Journée rouverte')
-    setSel(null)
-    await load()
+  // Réinitialise le panneau de réouverture quand on change de clôture affichée.
+  useEffect(() => {
+    setReopenOpen(false)
+    setMotif('')
+    setConfirmChk(false)
+  }, [sel])
+
+  async function doReopen(c: Closure) {
+    const m = motif.trim()
+    if (!m) return toast('Le motif de réouverture est obligatoire')
+    if (!confirmChk) return toast('Coche la confirmation pour continuer')
+    setBusy(true)
+    try {
+      const { error } = await supabase.from('day_closures').update({ status: 'reopened' }).eq('id', c.id)
+      if (error) throw error
+      await supabase.from('audit_log').insert({
+        station_id: stationId,
+        action: 'reouverture',
+        entity: 'day_closures',
+        entity_id: c.day,
+        detail: { motif: m, by: user?.id },
+      })
+      toast('Journée rouverte')
+      setSel(null)
+      await load()
+    } catch (e) {
+      toast('⚠ ' + (e as Error).message)
+    } finally {
+      setBusy(false)
+    }
   }
 
   if (sel && st) {
@@ -63,9 +89,40 @@ export function Historique() {
           day={sel.day}
           sum={sel.summary}
           withActions
-          canReopen={isOwner && sel.status === 'closed'}
-          onReopen={() => reopen(sel)}
+          canReopen={isOwner && sel.status === 'closed' && !reopenOpen}
+          onReopen={() => setReopenOpen(true)}
         />
+
+        {reopenOpen && isOwner && sel.status === 'closed' && (
+          <Card className="mt-3 border-crit">
+            <div className="text-[14px] font-bold mb-1">↺ Rouvrir la journée du {frDateShort(sel.day)}</div>
+            <p className="text-[12px] text-ink3 mb-2">
+              Le gérant pourra de nouveau modifier les relevés, puis re-clôturer. Cette action est
+              tracée dans le journal d'audit.
+            </p>
+            <label className="block mb-2">
+              <span className="block text-[12px] text-ink2 mb-1">Motif de la réouverture (obligatoire)</span>
+              <textarea
+                className="w-full rounded-[10px] border border-grid bg-page text-ink1 px-3 py-2 text-[14px] outline-none focus:border-brand"
+                rows={2}
+                value={motif}
+                onChange={(e) => setMotif(e.target.value)}
+                placeholder="ex : erreur de jauge sur la cuve gasoil"
+              />
+            </label>
+            <label className="flex items-start gap-3 mb-3">
+              <input type="checkbox" className="w-5 h-5 mt-0.5 shrink-0" checked={confirmChk} onChange={(e) => setConfirmChk(e.target.checked)} />
+              <span className="text-[13px]">Je confirme la réouverture de cette journée clôturée.</span>
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <Button variant="ghost" onClick={() => setReopenOpen(false)} disabled={busy}>Annuler</Button>
+              <Button variant="danger" onClick={() => doReopen(sel)} disabled={busy || !motif.trim() || !confirmChk}>
+                {busy ? 'Réouverture…' : 'Confirmer la réouverture'}
+              </Button>
+            </div>
+          </Card>
+        )}
+
         {sel.status === 'reopened' && (
           <Card className="mt-3">
             <div className="text-[13px] text-ink2">Cette journée est rouverte — à re-clôturer dans Saisie.</div>
